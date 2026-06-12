@@ -1,0 +1,34 @@
+# ── Linting & code quality ────────────────────────────────────────────────────
+ruff
+
+# ── Formatting ────────────────────────────────────────────────────────────────
+black
+
+# ── Type checking ─────────────────────────────────────────────────────────────
+mypy
+types-requests
+
+# ── Testing ───────────────────────────────────────────────────────────────────
+pytest
+pytest-cov
+pytest-asyncio
+
+# ── Security: code patterns ───────────────────────────────────────────────────
+bandit[toml]
+
+# ── Security: dependency CVE scanning ────────────────────────────────────────
+pip-audit
+safety
+
+# ── Memory profiling ──────────────────────────────────────────────────────────
+objgraph
+memory-profiler
+guppy3
+
+# ── CPU & line profiling ──────────────────────────────────────────────────────
+line-profiler
+# py-spy must be installed globally (needs OS privileges for live process attach)
+# pip install py-spy
+
+# ── Pre-commit automation ────────────────────────────────────────────────────
+pre-commit

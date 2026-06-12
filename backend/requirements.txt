@@ -1,0 +1,55 @@
+# ── Web framework ─────────────────────────────────────────────────────────────
+fastapi
+uvicorn[standard]
+
+# ── Database ──────────────────────────────────────────────────────────────────
+sqlalchemy
+psycopg2-binary
+pgvector
+
+# ── Auth & security ───────────────────────────────────────────────────────────
+python-dotenv
+bcrypt
+python-jose[cryptography]
+python-multipart
+cryptography
+
+# ── Document parsing (Knowledge Base upload) ─────────────────────────────────
+pandas
+openpyxl
+pdfplumber
+python-docx
+
+# ── HTTP client ───────────────────────────────────────────────────────────────
+httpx
+
+# ── Messaging ─────────────────────────────────────────────────────────────────
+twilio
+
+# ── Google Calendar ───────────────────────────────────────────────────────────
+google-api-python-client
+google-auth
+google-auth-httplib2
+
+# ── CalDav (universal calendar sync — iCloud, Outlook 365, Nextcloud, etc.) ──
+caldav
+icalendar
+
+# ── LiveKit (voice AI transport + SIP phone calls) ───────────────────────────
+livekit
+livekit-agents>=1.0
+livekit-plugins-openai
+livekit-plugins-silero
+
+# ── OpenAI Realtime (STT + LLM + TTS — all-in-one realtime voice) ────────────
+openai
+
+# ── Scheduler (auto retry missed calls, daily reminders) ─────────────────────
+apscheduler
+
+# ── Excel export (analytics) ─────────────────────────────────────────────────
+openpyxl
+
+# ── Google Gemini (swap back when billing enabled) ────────────────────────────
+livekit-plugins-google
+google-genai

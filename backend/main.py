@@ -1,0 +1,71 @@
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI, Request, Response
+from fastapi.middleware.cors import CORSMiddleware
+
+from core.config import ALLOWED_ORIGINS
+from routers import auth, leads, kb, calling, appointments, sms, settings
+from routers import whatsapp, analytics, usage
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # ── Startup ───────────────────────────────────────────────────────────────
+    from services.scheduler import start_scheduler
+    start_scheduler()
+    yield
+    # ── Shutdown ──────────────────────────────────────────────────────────────
+    from services.scheduler import stop_scheduler
+    stop_scheduler()
+
+
+app = FastAPI(
+    title="Dr. Sonal Gupta AI Calling Platform — LiveKit Edition",
+    version="2.1.0",
+    docs_url=None,
+    redoc_url=None,
+    lifespan=lifespan,
+)
+
+# ── CORS — only allow configured origins (never wildcard *) ───────────────────
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=ALLOWED_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "Accept"],
+)
+
+
+# ── Security headers on every response ───────────────────────────────────────
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    response: Response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
+    return response
+
+
+app.include_router(auth.router)
+app.include_router(leads.router)
+app.include_router(kb.router)
+app.include_router(calling.router)
+app.include_router(appointments.router)
+app.include_router(sms.router)
+app.include_router(settings.router)
+app.include_router(whatsapp.router)
+app.include_router(analytics.router)
+app.include_router(usage.router)
+
+
+@app.get("/")
+def root():
+    return {"status": "ok", "app": "Dr. Sonal Gupta AI Calling Platform", "version": "2.1.0"}
+
+
+@app.get("/health")
+def health():
+    return {"status": "healthy"}

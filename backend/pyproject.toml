@@ -1,0 +1,86 @@
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+exclude = ["venv", ".venv", "__pycache__"]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes (unused imports, undefined names)
+    "I",   # isort
+    "B",   # bugbear (common bugs and design issues)
+    "S",   # bandit security checks
+    "UP",  # pyupgrade (use modern Python syntax)
+    "N",   # pep8 naming
+]
+ignore = [
+    "S101",  # assert ok in tests
+    "S110",  # try/except/pass — intentional silent failures in this codebase
+    "S603",  # subprocess with variable ok
+    "S607",  # partial executable path ok
+    "B008",  # FastAPI Depends() in default args
+    "N999",  # module names — FastAPI uses lowercase
+    "E501",  # line length handled by formatter
+    "E712",  # SQLAlchemy filter() uses == True/False — not a Python bool comparison
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S101", "S106", "S105", "E402"]   # env vars must be set before imports in conftest
+"init_db.py" = ["S106", "E402"]                # load_dotenv() must run before model imports
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+
+[tool.black]
+line-length = 100
+target-version = ["py311"]
+exclude = '''
+/(
+    venv | \.venv | __pycache__
+)/
+'''
+
+
+[tool.mypy]
+python_version = "3.11"
+ignore_missing_imports = true
+exclude = ["venv/", "tests/"]
+# Start permissive — tighten as the codebase matures
+strict = false
+warn_unused_ignores = true
+warn_return_any = false
+
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-v --tb=short"
+# Suppress "PytestUnraisableExceptionWarning" from async teardown
+filterwarnings = ["ignore::pytest.PytestUnraisableExceptionWarning"]
+
+
+[tool.coverage.run]
+source = ["."]
+omit = [
+    "venv/*",
+    "tests/*",
+    "seed_demo.py",
+    "init_db.py",
+]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false
+exclude_lines = [
+    "pragma: no cover",
+    "if __name__ == .__main__.:",
+    "raise NotImplementedError",
+    "\\.\\.\\.",
+]
+
+
+[tool.bandit]
+exclude_dirs = ["venv", "tests"]
+skips = ["B101", "B104"]  # assert, bind-all-interfaces (FastAPI 0.0.0.0 is intentional)
