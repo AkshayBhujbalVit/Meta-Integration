@@ -57,7 +57,7 @@ class CallingConfig(Base):
     provider = Column(String(30), default="vapi")  # vapi / bland / retell / custom
 
     # Agent identity
-    agent_name = Column(String(100), nullable=True, default="Dr. Sonal Gupta AI Caller")
+    agent_name = Column(String(100), nullable=True, default="AI Calling Assistant")
 
     # Generic credentials
     api_key = Column(String(255), nullable=True)  # API key / auth token for the provider

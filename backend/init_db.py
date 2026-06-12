@@ -69,16 +69,14 @@ def add_missing_columns():
     from sqlalchemy import text
 
     migrations = [
-        "ALTER TABLE calling_config ADD COLUMN IF NOT EXISTS agent_name VARCHAR(100) DEFAULT 'Dr. Sonal Gupta AI Caller'",
+        "ALTER TABLE calling_config ADD COLUMN IF NOT EXISTS agent_name VARCHAR(100) DEFAULT 'AI Calling Assistant'",
         "ALTER TABLE calling_config ADD COLUMN IF NOT EXISTS llm_model VARCHAR(50) DEFAULT 'gpt-4o'",
         "ALTER TABLE calling_config ADD COLUMN IF NOT EXISTS voice_provider VARCHAR(30) DEFAULT '11labs'",
         "ALTER TABLE calling_config ADD COLUMN IF NOT EXISTS voice_id VARCHAR(100)",
         "ALTER TABLE call_log ADD COLUMN IF NOT EXISTS recording_url VARCHAR(500)",
         "ALTER TABLE calling_config ADD COLUMN IF NOT EXISTS phone_number_id VARCHAR(100)",
         "ALTER TABLE calling_config ADD COLUMN IF NOT EXISTS auto_call_on_upload BOOLEAN DEFAULT FALSE",
-        # Fix city — was incorrectly set to Pune, clinic is in Agra
-        "UPDATE clinic_settings SET city = 'Agra' WHERE city = 'Pune'",
-        "UPDATE clinic_settings SET clinic_name = 'Dr. Sonal Gupta Clinic' WHERE clinic_name = 'Dr. Sonal Gupta Clinic'",
+        "UPDATE clinic_settings SET clinic_name = 'Vidushi Infotech' WHERE clinic_name = 'Dr. Sonal Gupta Clinic'",
         # Calendar integration columns
         "ALTER TABLE appointment ADD COLUMN IF NOT EXISTS calendar_event_id VARCHAR(255)",
         # Phone number provider
@@ -127,9 +125,9 @@ def seed_admin():
 
     db = Session()
     try:
-        existing = db.query(Admin).filter_by(email="admin@sonalgupta.com").first()
+        existing = db.query(Admin).filter_by(email="admin@vidushiinfotech.com").first()
         if existing:
-            print("Admin already exists: admin@sonalgupta.com")
+            print("Admin already exists: admin@vidushiinfotech.com")
             return
 
         admin_password = os.getenv("ADMIN_INITIAL_PASSWORD")
@@ -142,15 +140,15 @@ def seed_admin():
             )
         pw_hash = bcrypt.hashpw(admin_password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
         admin = Admin(
-            email="admin@sonalgupta.com",
+            email="admin@vidushiinfotech.com",
             password_hash=pw_hash,
-            full_name="Dr. Sonal Gupta",
+            full_name="Vidushi Infotech Admin",
             phone="+91-XXXXXXXXXX",
             is_active=True,
         )
         db.add(admin)
         db.commit()
-        print("Created admin: admin@sonalgupta.com (password from ADMIN_INITIAL_PASSWORD)")
+        print("Created admin: admin@vidushiinfotech.com (password from ADMIN_INITIAL_PASSWORD)")
     except Exception as e:
         db.rollback()
         print(f"  Error creating admin: {e}")
@@ -258,12 +256,12 @@ def seed_default_settings():
         if not db.query(ClinicSettings).first():
             db.add(
                 ClinicSettings(
-                    clinic_name="Dr. Sonal Gupta Clinic",
-                    doctor_name="Dr. Sonal Gupta",
-                    city="Agra",
-                    address="Ojas Hospital, Kamla Nagar, Agra, Uttar Pradesh",
-                    website="https://www.drsonalgupta.in",
-                    timings="Mon–Sat: 10:00 AM–1:00 PM and 5:00 PM–8:00 PM",
+                    clinic_name="Vidushi Infotech",
+                    doctor_name="",
+                    city="",
+                    address="",
+                    website="https://www.vidushiinfotech.com",
+                    timings="Mon–Sat: 10:00 AM–6:00 PM",
                 )
             )
             print("Created default clinic settings")
@@ -312,6 +310,10 @@ def seed_default_settings():
 
 
 def seed_kb_items():
+    # KB content is client-specific — add via the UI after setup
+    print("KB items: skipped (add client-specific content via Settings > Knowledge Base)")
+    return
+
     db = Session()
     try:
         from models.models.knowledge_base import KBItem, KBSection
@@ -554,7 +556,7 @@ def seed_kb_items():
 
 if __name__ == "__main__":
     print("=" * 55)
-    print("  Dr. Sonal Gupta AI — Database Initialization")
+    print("  Vidushi Infotech — Database Initialization")
     print("=" * 55)
     print(f"  Host: {os.getenv('POSTGRES_HOST')}")
     print(f"  DB:   {os.getenv('POSTGRES_DB')}")
@@ -572,5 +574,5 @@ if __name__ == "__main__":
     print("Done! You can now run:")
     print("  uvicorn main:app --host 0.0.0.0 --port 8006")
     print()
-    print("Login: admin@sonalgupta.com (use the password you set in ADMIN_INITIAL_PASSWORD)")
+    print("Login: admin@vidushiinfotech.com (use the password you set in ADMIN_INITIAL_PASSWORD)")
     print("=" * 55)

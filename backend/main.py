@@ -20,8 +20,8 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="Dr. Sonal Gupta AI Calling Platform — LiveKit Edition",
-    version="2.1.0",
+    title="Vidushi Infotech — AI Calling Platform",
+    version="1.0.0",
     docs_url=None,
     redoc_url=None,
     lifespan=lifespan,
@@ -63,7 +63,7 @@ app.include_router(usage.router)
 
 @app.get("/")
 def root():
-    return {"status": "ok", "app": "Dr. Sonal Gupta AI Calling Platform", "version": "2.1.0"}
+    return {"status": "ok", "app": "Vidushi Infotech AI Calling Platform", "version": "1.0.0"}
 
 
 @app.get("/health")

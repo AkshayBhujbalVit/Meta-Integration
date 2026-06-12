@@ -52,8 +52,8 @@ export function Sidebar() {
         <div className="relative flex items-center gap-3">
           <div className="relative w-11 h-11 shrink-0">
             <Image
-              src="/dr-sonal.png"
-              alt="Dr. Sonal Gupta"
+              src="/vidushi-logo.png"
+              alt="Vidushi Infotech"
               fill
               className="rounded-full object-cover object-top ring-2 ring-white/60"
               onError={(e) => {
@@ -64,12 +64,12 @@ export function Sidebar() {
               }}
             />
             <div className="hidden w-11 h-11 rounded-full bg-white/20 items-center justify-center absolute inset-0 border-2 border-white/40">
-              <span className="text-white text-sm font-bold">SG</span>
+              <span className="text-white text-sm font-bold">VI</span>
             </div>
           </div>
           <div className="min-w-0">
-            <p className="text-sm font-bold text-white leading-tight truncate">Dr. Sonal Gupta</p>
-            <p className="text-[10px] text-violet-200 font-medium leading-tight mt-0.5">Online Woman Health Care</p>
+            <p className="text-sm font-bold text-white leading-tight truncate">Vidushi Infotech</p>
+            <p className="text-[10px] text-violet-200 font-medium leading-tight mt-0.5">AI Calling Platform</p>
           </div>
         </div>
       </div>

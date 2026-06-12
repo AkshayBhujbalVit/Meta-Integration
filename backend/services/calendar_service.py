@@ -128,7 +128,7 @@ def _caldav_create(calendar, appt) -> str | None:
         appt_label = "Online" if "online" in (appt.appointment_type or "").lower() else "In-Clinic"
 
         cal = iCal()
-        cal.add("prodid", "-//Dr Sonal Gupta AI//EN")
+        cal.add("prodid", "-//Vidushi Infotech AI//EN")
         cal.add("version", "2.0")
         event = Event()
         event.add("uid", uid)

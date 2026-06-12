@@ -90,7 +90,7 @@ def _build_rag_query(lead) -> str:
         parts.append(lead.second_inquiry_type)
     if getattr(lead, "problem_description", None):
         parts.append(lead.problem_description)
-    parts += ["Dr. Sonal Gupta", "consultation", "appointment", "fees", "treatment"]
+    parts += ["consultation", "appointment", "fees", "treatment"]
     return " ".join(parts)
 
 
@@ -269,19 +269,19 @@ Only collect: name and appointment timing.
 def build_system_prompt(lead: Lead, db: Session) -> str:
     cfg = db.query(CallingConfig).first()
     clinic = db.query(ClinicSettings).first()
-    clinic_name = clinic.clinic_name if clinic else "Dr. Sonal Gupta Clinic"
-    doctor_name = clinic.doctor_name if clinic else "Dr. Sonal Gupta"
+    clinic_name = clinic.clinic_name if clinic else "Our Clinic"
+    doctor_name = clinic.doctor_name if clinic else "Our Team"
     clinic_address = (
         clinic.address
         if clinic and clinic.address
-        else "Ojas Hospital, Kamla Nagar, Agra, Uttar Pradesh"
+        else ""
     )
     clinic_timings = (
         clinic.timings
         if clinic and clinic.timings
-        else "Mon-Sat: 10:00 AM-1:00 PM and 5:00 PM-8:00 PM"
+        else "Mon-Sat: 10:00 AM-6:00 PM"
     )
-    clinic_city = clinic.city if clinic and clinic.city else "Agra"
+    clinic_city = clinic.city if clinic and clinic.city else ""
     first_name = (lead.full_name or "").split()[0] if lead.full_name else "ji"
     is_agra = lead.consultation_type == "in_clinic"
 
@@ -339,7 +339,7 @@ Do NOT say "pehle baat hui thi" unless the patient specifically asks or referenc
     # Always ask the patient — never assume online/offline from DB value
     consultation_text = "Not confirmed yet — ask patient whether they prefer online video call or clinic visit (offline)."
     if is_agra:
-        consultation_text = "Patient is from Agra area — clinic visit is convenient, but still ask their preference (online or offline)."
+        consultation_text = "Patient may be local — clinic visit is possible, but still ask their preference (online or offline)."
 
     prompt = f"""{instructions}
 {followup_instruction}
@@ -390,21 +390,20 @@ Consultation type: {consultation_text}
 # ── Inbound call prompt ───────────────────────────────────────────────────────
 
 DEFAULT_INBOUND_INSTRUCTIONS = """\
-Aap Dr. Sonal Gupta Clinic ki AI receptionist hain.
-Ek patient ne aapko call kiya hai.
+Aap {clinic_name} ki AI receptionist hain.
+Ek caller ne aapko call kiya hai.
 
-Greeting: "Namaste! Dr. Sonal Gupta Clinic mein aapka swagat hai. Main aapki kya madad kar sakti hoon?"
+Greeting: "Namaste! {clinic_name} mein aapka swagat hai. Main aapki kya madad kar sakti hoon?"
 
 Aap inn cheezon mein madad kar sakti hain:
 1. Appointment book karna — date, time aur type (online/in-clinic) poochho, phir book_appointment tool call karo
-2. Clinic timings aur address batana: Ojas Hospital, Kamla Nagar, Agra — Mon-Sat 9AM-7PM
-3. Online consultation option explain karna (any city se possible hai)
+2. Timings aur address batana
+3. Online consultation option explain karna
 4. General inquiry ka jawab dena
 
 RULES:
-- Fees bilkul mat batao — "fees ke liye clinic team call karegi"
-- Koi medical advice mat do
-- Patient ki bhasha mein baat karo (Hindi/Marathi/English)
+- Fees bilkul mat batao — "fees ke liye team call karegi"
+- Caller ki bhasha mein baat karo (Hindi/Marathi/English)
 - Call 5 minute se zyada mat karo
 """
 
@@ -425,8 +424,8 @@ Patient profile:
 - Previous status: {lead.status}
 - Total calls received: {lead.call_count or 0}
 
-GREETING: "Namaste {first_name} ji! Dr. Sonal Gupta Clinic mein aapka swagat hai. \
-Kya aap appointment book karna chahti hain ya koi aur madad chahiye?"
+GREETING: "Namaste {first_name} ji! {clinic_name} mein aapka swagat hai. \
+Kya aap appointment book karna chahte hain ya koi aur madad chahiye?"
 
 Agar pehle baat hui hai toh familiar aur warm tone rakhein.
 """

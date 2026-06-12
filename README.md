@@ -1,4 +1,4 @@
-# Dr. Sonal Gupta — AI Calling Platform
+# Vidushi Infotech — AI Calling Platform
 
 ## Prerequisites
 - Python 3.10+

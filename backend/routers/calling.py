@@ -315,7 +315,7 @@ async def preview_voice(voice: str, _=Depends(get_current_admin)):
         raise HTTPException(status_code=400, detail="Invalid voice")
 
     sample = (
-        "Namaste! Main Dr. Sonal Gupta clinic ki AI calling assistant hoon. "
+        "Namaste! Main AI calling assistant hoon. "
         "Kya main aapki madad kar sakti hoon?"
     )
 

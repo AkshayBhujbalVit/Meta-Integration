@@ -71,7 +71,7 @@ export default function AgentPage() {
 
   useEffect(() => {
     if (cfg) {
-      setAgentName(cfg.agent_name ?? "Dr. Sonal Gupta AI Caller");
+      setAgentName(cfg.agent_name ?? "AI Calling Assistant");
       setAgentVoice(cfg.agent_voice ?? "alloy");
       setSystemPrompt(cfg.system_prompt || cfg.default_system_prompt || "");
       setPhoneNumberId(cfg.phone_number_id ?? "");
@@ -228,7 +228,7 @@ export default function AgentPage() {
             <input
               value={agentName}
               onChange={(e) => mark(() => setAgentName(e.target.value))}
-              placeholder="e.g. Dr. Sonal Gupta AI Caller"
+              placeholder="e.g. AI Calling Assistant"
               className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500"
             />
           </div>

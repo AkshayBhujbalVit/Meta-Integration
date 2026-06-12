@@ -7,7 +7,7 @@ import { Toaster } from "@/components/ui/sonner";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Dr. Sonal Gupta — AI Calling Platform",
+  title: "Vidushi Infotech — AI Calling Platform",
   description: "AI-powered lead calling and appointment platform",
 };
 

@@ -305,7 +305,7 @@ def _html_page(title: str, body: str, error: bool = False) -> str:
   <div class="card">
     <h1>{title}</h1>
     <p>{body}</p>
-    <div class="footer">Dr. Sonal Gupta Clinic</div>
+    <div class="footer">Vidushi Infotech</div>
   </div>
 </body>
 </html>"""

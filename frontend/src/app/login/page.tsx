@@ -37,7 +37,7 @@ export default function LoginPage() {
             <div className="w-14 h-14 rounded-2xl bg-violet-600 flex items-center justify-center mb-3 shadow-md">
               <Stethoscope className="w-7 h-7 text-white" />
             </div>
-            <h1 className="text-xl font-bold text-gray-900">Dr. Sonal Gupta</h1>
+            <h1 className="text-xl font-bold text-gray-900">Vidushi Infotech</h1>
             <p className="text-sm text-gray-500 mt-0.5">AI Calling Platform</p>
           </div>
 
@@ -52,7 +52,7 @@ export default function LoginPage() {
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="admin@sonalgupta.com"
+                placeholder="admin@vidushiinfotech.com"
                 className="w-full px-3.5 py-2.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent transition"
               />
             </div>
