@@ -49,9 +49,9 @@ def _get_google_service(db: Session):
 
 
 def _google_create(service, calendar_id: str, appt) -> str | None:
-    appt_label = "In-Clinic" if appt.appointment_type == "in_clinic" else "Online"
+    appt_label = "In-Person" if appt.appointment_type == "in_person" else "Online"
     desc_lines = [
-        f"Patient: {appt.patient_name or '—'}",
+        f"Lead: {appt.patient_name or '—'}",
         f"Phone: {appt.phone}",
         f"Type: {appt_label}",
     ]
@@ -125,7 +125,7 @@ def _caldav_create(calendar, appt) -> str | None:
         from icalendar import Event
 
         uid = str(uuid.uuid4())
-        appt_label = "Online" if "online" in (appt.appointment_type or "").lower() else "In-Clinic"
+        appt_label = "Online" if "online" in (appt.appointment_type or "").lower() else "In-Person"
 
         cal = iCal()
         cal.add("prodid", "-//Vidushi Infotech AI//EN")
@@ -139,7 +139,7 @@ def _caldav_create(calendar, appt) -> str | None:
             filter(
                 None,
                 [
-                    f"Patient: {appt.patient_name or '—'}",
+                    f"Lead: {appt.patient_name or '—'}",
                     f"Phone: {appt.phone}",
                     f"Inquiry: {appt.inquiry_type}" if appt.inquiry_type else None,
                     f"Notes: {appt.notes}" if appt.notes else None,
@@ -172,7 +172,7 @@ def _caldav_update(calendar, uid: str, appt) -> bool:
         from icalendar import Calendar as iCal
 
         caldav_event = calendar.event_by_uid(uid)
-        appt_label = "Online" if "online" in (appt.appointment_type or "").lower() else "In-Clinic"
+        appt_label = "Online" if "online" in (appt.appointment_type or "").lower() else "In-Person"
 
         cal = iCal.from_ical(caldav_event.data)
         for component in cal.walk("VEVENT"):
@@ -280,7 +280,7 @@ def update_calendar_event(event_id: str, appt, db: Session) -> bool:
     service, calendar_id = _get_google_service(db)
     if not service:
         return False
-    appt_label = "In-Clinic" if appt.appointment_type == "in_clinic" else "Online"
+    appt_label = "In-Person" if appt.appointment_type == "in_person" else "Online"
     try:
         event = service.events().get(calendarId=calendar_id, eventId=event_id).execute()
         event["summary"] = f"{appt_label} – {appt.patient_name or 'Patient'}"

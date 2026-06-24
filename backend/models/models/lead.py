@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text, Enum
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text, Enum, ForeignKey
 from sqlalchemy.sql import func
 import enum
 from .base import Base
@@ -46,7 +46,14 @@ class Lead(Base):
     id = Column(Integer, primary_key=True, index=True)
     upload_id = Column(Integer, nullable=True, index=True)
 
-    # Patient info from CSV
+    # Multi-tenant: which client and campaign this lead belongs to
+    client_id = Column(Integer, ForeignKey("client.id", ondelete="SET NULL"), nullable=True, index=True)
+    campaign_id = Column(Integer, ForeignKey("campaign.id", ondelete="SET NULL"), nullable=True, index=True)
+
+    # Where this lead came from
+    source_platform = Column(String(50), nullable=True, index=True)  # meta_lead_ads / meta_whatsapp / hubspot / manual / csv
+
+    # Contact info
     full_name = Column(String(255), nullable=True)
     phone = Column(String(20), nullable=False, index=True)
     email = Column(String(255), nullable=True)
@@ -70,8 +77,7 @@ class Lead(Base):
     second_inquiry_type = Column(String(100), nullable=True)
     second_problem_description = Column(Text, nullable=True)
 
-    # Consultation type — auto-set based on city (Agra = in_clinic)
-    consultation_type = Column(String(20), default="online")   # online / in_clinic
+    consultation_type = Column(String(20), default="online")   # online / in_person
 
     # Human caller assignment
     assigned_to_human = Column(Boolean, default=False)
@@ -84,6 +90,9 @@ class Lead(Base):
     call_count = Column(Integer, default=0)
     last_called_at = Column(DateTime(timezone=True), nullable=True)
     notes = Column(Text, nullable=True)
+
+    # Generic dedup key for non-Meta sources (hubspot_<id>, gads_<id>, klav_<id>)
+    external_id = Column(String(150), nullable=True, unique=True, index=True)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())

@@ -22,14 +22,16 @@ def _verify_internal_token(x_internal_token: str | None = Header(default=None)):
     """Shared-secret guard for internal agent→backend endpoints."""
     secret = os.getenv("INTERNAL_API_SECRET", "")
     if not secret:
-        return  # not configured — allow (dev fallback; set INTERNAL_API_SECRET in prod)
+        # INTERNAL_API_SECRET not set — block all internal calls in production
+        # Set INTERNAL_API_SECRET in your .env to enable agent→backend communication
+        raise HTTPException(status_code=503, detail="INTERNAL_API_SECRET not configured")
     if x_internal_token != secret:
         raise HTTPException(status_code=401, detail="Invalid or missing internal token")
 
 
-def _parse_clinic_windows(timings: str) -> list[tuple[dt_time, dt_time]]:
+def _parse_business_hours(timings: str) -> list[tuple[dt_time, dt_time]]:
     """
-    Parse clinic timings string into (start, end) time pairs.
+    Parse business hours string into (start, end) time pairs.
     Handles: "Mon-Sat: 10:00 AM–1:00 PM and 5:00 PM–8:00 PM"
     Returns e.g. [(time(10,0), time(13,0)), (time(17,0), time(20,0))]
     """
@@ -50,13 +52,13 @@ def _parse_clinic_windows(timings: str) -> list[tuple[dt_time, dt_time]]:
     return windows
 
 
-def _within_clinic_hours(slot: datetime, db: Session) -> bool:
-    """Return True if slot falls within any clinic time window (Mon–Sat)."""
+def _within_business_hours(slot: datetime, db: Session) -> bool:
+    """Return True if slot falls within any business hours window (Mon–Sat)."""
     if slot.weekday() == 6:  # Sunday
         return False
     clinic = db.query(ClinicSettings).first()
     timings_str = clinic.timings if clinic and clinic.timings else ""
-    windows = _parse_clinic_windows(timings_str) if timings_str else []
+    windows = _parse_business_hours(timings_str) if timings_str else []
     # Fallback: assume 10–13 and 17–20 if parsing fails
     if not windows:
         windows = [(dt_time(10, 0), dt_time(13, 0)), (dt_time(17, 0), dt_time(20, 0))]
@@ -91,7 +93,7 @@ def check_specific_slot(
     slot = _round30(requested)
 
     # Check clinic hours FIRST — reject if outside working windows
-    if not _within_clinic_hours(slot, db):
+    if not _within_business_hours(slot, db):
         alts_resp = get_available_slots(days_ahead=7, db=db)
         alts = alts_resp.get("slots", [])[:3]
         clinic = db.query(ClinicSettings).first()
@@ -177,10 +179,10 @@ def get_available_slots(
     """
     now = datetime.now()
 
-    # Parse clinic time windows from ClinicSettings
+    # Parse business hours windows from settings
     clinic = db.query(ClinicSettings).first()
     timings_str = clinic.timings if clinic and clinic.timings else ""
-    windows = _parse_clinic_windows(timings_str) if timings_str else []
+    windows = _parse_business_hours(timings_str) if timings_str else []
     if not windows:
         windows = [(dt_time(10, 0), dt_time(13, 0)), (dt_time(17, 0), dt_time(20, 0))]
 
@@ -442,6 +444,8 @@ def all_call_logs(
                 "id": log.id,
                 "lead_id": log.lead_id,
                 "lead_name": lead.full_name if lead else "",
+                "source_platform": lead.source_platform if lead else None,
+                "campaign_name": lead.campaign_name if lead else None,
                 "phone": log.phone,
                 "attempt_number": log.attempt_number,
                 "status": log.status,

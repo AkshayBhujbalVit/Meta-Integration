@@ -232,14 +232,14 @@ def appointment_action(token: str, db: Session = Depends(get_db)):
     if not data:
         return _html_page(
             "⚠️ Link Expired",
-            "This link has expired or is invalid. Please contact the clinic directly.",
+            "This link has expired or is invalid. Please contact us directly.",
             error=True,
         )
 
     appt = db.query(Appointment).filter(Appointment.id == data["appt_id"]).first()
     if not appt:
         return _html_page(
-            "⚠️ Not Found", "Appointment not found. Please contact the clinic.", error=True
+            "⚠️ Not Found", "Appointment not found. Please contact us.", error=True
         )
 
     action = data.get("action", "")
@@ -249,7 +249,7 @@ def appointment_action(token: str, db: Session = Depends(get_db)):
             return _html_page("Already Cancelled", "This appointment was already cancelled.")
         cal_event_id = appt.calendar_event_id
         appt.status = "cancelled"
-        appt.cancellation_reason = "Cancelled by patient via link"
+        appt.cancellation_reason = "Cancelled by lead via link"
         db.commit()
         if cal_event_id:
             try:
@@ -265,17 +265,17 @@ def appointment_action(token: str, db: Session = Depends(get_db)):
         return _html_page(
             "✅ Appointment Cancelled",
             f"Your appointment on {appt.appointment_date.strftime('%d %b %Y at %I:%M %p')} has been cancelled.<br><br>"
-            "To book a new appointment, please WhatsApp or call the clinic.",
+            "To book a new appointment, please WhatsApp or call us.",
         )
 
     if action == "reschedule":
-        appt.notes = (appt.notes or "") + "\n[Reschedule requested by patient via link]"
+        appt.notes = (appt.notes or "") + "\n[Reschedule requested by lead via link]"
         db.commit()
         return _html_page(
             "🔄 Reschedule Requested",
             f"We've noted that you'd like to reschedule your appointment on "
             f"{appt.appointment_date.strftime('%d %b %Y at %I:%M %p')}.<br><br>"
-            "Please WhatsApp or call the clinic with your preferred new date and time. "
+            "Please WhatsApp or call us with your preferred new date and time. "
             "Our team will confirm the new slot within a few hours.",
         )
 

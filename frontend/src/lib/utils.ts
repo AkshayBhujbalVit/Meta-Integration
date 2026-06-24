@@ -23,9 +23,9 @@ export function fmtRelative(date: string | null | undefined) {
 
 export const STATUS_COLORS: Record<string, string> = {
   new: "bg-blue-100 text-blue-700",
-  call_scheduled: "bg-purple-100 text-purple-700",
+  call_scheduled: "bg-blue-100 text-blue-700",
   calling: "bg-yellow-100 text-yellow-700",
-  interested: "bg-violet-100 text-violet-700",
+  interested: "bg-blue-100 text-blue-700",
   appointment_booked: "bg-green-100 text-green-700",
   not_interested: "bg-red-100 text-red-700",
   no_answer: "bg-gray-100 text-gray-600",

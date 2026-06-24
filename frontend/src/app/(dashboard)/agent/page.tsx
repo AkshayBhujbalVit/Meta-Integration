@@ -208,7 +208,7 @@ export default function AgentPage() {
       {/* ── Agent Setup ── */}
       <div className="bg-white rounded-2xl border border-gray-100 p-6 space-y-4">
         <div className="flex items-center gap-3 mb-1">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-500 to-violet-700 flex items-center justify-center">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center">
             <Bot className="w-5 h-5 text-white" />
           </div>
           <div>
@@ -229,7 +229,7 @@ export default function AgentPage() {
               value={agentName}
               onChange={(e) => mark(() => setAgentName(e.target.value))}
               placeholder="e.g. AI Calling Assistant"
-              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500"
+              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
 
@@ -260,11 +260,11 @@ export default function AgentPage() {
                 <button
                   type="button"
                   onClick={() => setVoiceOpen((o) => !o)}
-                  className="w-full flex items-center justify-between px-3 py-2 bg-white border border-gray-200 rounded-lg hover:border-violet-400 focus:outline-none focus:ring-2 focus:ring-violet-500 transition text-sm"
+                  className="w-full flex items-center justify-between px-3 py-2 bg-white border border-gray-200 rounded-lg hover:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition text-sm"
                 >
                   <div className="flex items-center gap-2.5">
-                    <div className="w-7 h-7 rounded-full bg-violet-50 flex items-center justify-center">
-                      <Volume2 className="w-3.5 h-3.5 text-violet-600" />
+                    <div className="w-7 h-7 rounded-full bg-blue-50 flex items-center justify-center">
+                      <Volume2 className="w-3.5 h-3.5 text-blue-600" />
                     </div>
                     <div className="text-left">
                       <p className="font-semibold text-gray-800 text-sm leading-tight">{selected.label}</p>
@@ -294,22 +294,22 @@ export default function AgentPage() {
                           <div
                             key={v.id}
                             className={`flex items-center gap-3 px-3 py-2.5 cursor-pointer transition
-                              ${isSelected ? "bg-violet-50" : "hover:bg-gray-50"}`}
+                              ${isSelected ? "bg-blue-50" : "hover:bg-gray-50"}`}
                             onClick={() => { mark(() => setAgentVoice(v.id)); setVoiceOpen(false); }}
                           >
                             {/* Check or playing indicator */}
                             <div className="w-4 h-4 shrink-0 flex items-center justify-center">
                               {isSelected
-                                ? <Check className="w-4 h-4 text-violet-600" />
+                                ? <Check className="w-4 h-4 text-blue-600" />
                                 : isPlaying
-                                ? <span className="w-2 h-2 rounded-full bg-violet-500 animate-pulse block" />
+                                ? <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse block" />
                                 : null}
                             </div>
 
                             {/* Voice info */}
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-1.5">
-                                <span className={`text-sm font-medium ${isSelected ? "text-violet-700" : "text-gray-800"}`}>{v.label}</span>
+                                <span className={`text-sm font-medium ${isSelected ? "text-blue-700" : "text-gray-800"}`}>{v.label}</span>
                                 <span className={`text-[10px] px-1.5 py-0.5 rounded-full border font-medium ${GENDER_STYLE[v.gender]}`}>
                                   {v.gender}
                                 </span>
@@ -323,8 +323,8 @@ export default function AgentPage() {
                               onClick={(e) => handlePreviewVoice(v.id, e)}
                               className={`shrink-0 flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-medium border transition
                                 ${isPlaying
-                                  ? "bg-violet-50 text-violet-600 border-violet-200"
-                                  : "bg-gray-50 text-gray-500 border-gray-200 hover:border-violet-300 hover:text-violet-600"}`}
+                                  ? "bg-blue-50 text-blue-600 border-blue-200"
+                                  : "bg-gray-50 text-gray-500 border-gray-200 hover:border-blue-300 hover:text-blue-600"}`}
                               title="Preview voice"
                             >
                               {isPreviewing
@@ -354,7 +354,7 @@ export default function AgentPage() {
               <button
                 type="button"
                 onClick={() => { setSystemPrompt(cfg.default_system_prompt); setDirty(true); }}
-                className="text-xs text-violet-600 hover:text-violet-700 hover:underline"
+                className="text-xs text-blue-600 hover:text-blue-700 hover:underline"
               >
                 Reset to default template
               </button>
@@ -362,17 +362,16 @@ export default function AgentPage() {
           </div>
           <p className="text-[11px] text-gray-400 mb-1.5">
             A default template is pre-filled — edit it freely or write your own.
-            Use <code className="bg-gray-100 px-0.5 rounded">{"{clinic_name}"}</code>{" "}
-            <code className="bg-gray-100 px-0.5 rounded">{"{doctor_name}"}</code>{" "}
+            Use <code className="bg-gray-100 px-0.5 rounded">{"{business_name}"}</code>{" "}
             <code className="bg-gray-100 px-0.5 rounded">{"{first_name}"}</code>{" "}
-            <code className="bg-gray-100 px-0.5 rounded">{"{inquiry_type}"}</code> as dynamic placeholders.
-            Knowledge base is auto-injected at call time.
+            <code className="bg-gray-100 px-0.5 rounded">{"{full_name}"}</code>{" "}
+            <code className="bg-gray-100 px-0.5 rounded">{"{campaign_name}"}</code> as dynamic placeholders.
           </p>
           <textarea
             value={systemPrompt}
             onChange={(e) => mark(() => setSystemPrompt(e.target.value))}
             rows={14}
-            className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-violet-500 font-mono resize-none leading-relaxed"
+            className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono resize-none leading-relaxed"
             placeholder="Enter agent instructions…"
           />
         </div>
@@ -386,7 +385,7 @@ export default function AgentPage() {
             value={phoneNumberId}
             onChange={(e) => mark(() => setPhoneNumberId(e.target.value))}
             placeholder="Enter phone number ID…"
-            className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500"
+            className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
         </div>
 
@@ -400,7 +399,7 @@ export default function AgentPage() {
             <button
               type="button"
               onClick={() => mark(() => setAutoCallOnUpload((v) => !v))}
-              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${autoCallOnUpload ? "bg-violet-600" : "bg-gray-200"}`}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${autoCallOnUpload ? "bg-blue-600" : "bg-gray-200"}`}
             >
               <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${autoCallOnUpload ? "translate-x-6" : "translate-x-1"}`} />
             </button>
@@ -414,7 +413,7 @@ export default function AgentPage() {
                   type="time"
                   value={callStartTime}
                   onChange={(e) => mark(() => setCallStartTime(e.target.value))}
-                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500 bg-white"
+                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                 />
               </div>
               <div>
@@ -423,10 +422,10 @@ export default function AgentPage() {
                   type="time"
                   value={callEndTime}
                   onChange={(e) => mark(() => setCallEndTime(e.target.value))}
-                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500 bg-white"
+                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                 />
               </div>
-              <p className="col-span-2 text-xs text-violet-600 bg-violet-50 rounded-lg px-3 py-2">
+              <p className="col-span-2 text-xs text-blue-600 bg-blue-50 rounded-lg px-3 py-2">
                 Leads added between <strong>{callStartTime}</strong> and <strong>{callEndTime}</strong> will be queued and called automatically, one by one.
               </p>
             </div>
@@ -436,7 +435,7 @@ export default function AgentPage() {
         <button
           onClick={() => saveMutation.mutate()}
           disabled={saveMutation.isPending || !dirty}
-          className="flex items-center gap-2 px-5 py-2.5 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white text-sm font-semibold rounded-lg transition"
+          className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-semibold rounded-lg transition"
         >
           {saveMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
           Save Agent
@@ -459,7 +458,7 @@ export default function AgentPage() {
             <button
               onClick={startCalls}
               disabled={calling || newLeads.length === 0}
-              className="flex items-center gap-2 px-4 py-2 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white text-sm font-semibold rounded-lg transition"
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-semibold rounded-lg transition"
             >
               {calling ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
               {selected.length > 0 ? `Call ${selected.length} Selected` : "Start Calling"}
@@ -469,7 +468,7 @@ export default function AgentPage() {
 
         {newLeadsLoading ? (
           <div className="flex items-center justify-center h-24">
-            <Loader2 className="w-5 h-5 animate-spin text-violet-500" />
+            <Loader2 className="w-5 h-5 animate-spin text-blue-500" />
           </div>
         ) : newLeads.length === 0 ? (
           <div className="text-center py-10 text-gray-400">
@@ -482,7 +481,7 @@ export default function AgentPage() {
               <thead>
                 <tr className="bg-gray-50/70 text-xs text-gray-400 border-b border-gray-100">
                   <th className="px-4 py-3 w-10">
-                    <input type="checkbox" checked={selected.length === newLeads.length && newLeads.length > 0} onChange={toggleAll} className="rounded border-gray-300 accent-violet-600" />
+                    <input type="checkbox" checked={selected.length === newLeads.length && newLeads.length > 0} onChange={toggleAll} className="rounded border-gray-300 accent-blue-600" />
                   </th>
                   <th className="px-4 py-3 text-left font-medium">Name</th>
                   <th className="px-4 py-3 text-left font-medium">Phone</th>
@@ -495,15 +494,15 @@ export default function AgentPage() {
                 {newLeads.map((lead) => (
                   <tr key={lead.id} className="hover:bg-gray-50/60 cursor-pointer" onClick={() => toggleLead(lead.id)}>
                     <td className="px-4 py-3">
-                      <input type="checkbox" checked={selected.includes(lead.id)} onChange={() => toggleLead(lead.id)} onClick={(e) => e.stopPropagation()} className="rounded border-gray-300 accent-violet-600" />
+                      <input type="checkbox" checked={selected.includes(lead.id)} onChange={() => toggleLead(lead.id)} onClick={(e) => e.stopPropagation()} className="rounded border-gray-300 accent-blue-600" />
                     </td>
                     <td className="px-4 py-3 font-medium text-gray-800">{lead.full_name || "—"}</td>
                     <td className="px-4 py-3 text-gray-500">{lead.phone}</td>
                     <td className="px-4 py-3 text-gray-500 max-w-[160px] truncate">{lead.inquiry_type || "—"}</td>
                     <td className="px-4 py-3 text-gray-500">{lead.city || "—"}</td>
                     <td className="px-4 py-3">
-                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${lead.consultation_type === "in_clinic" ? "bg-orange-50 text-orange-600" : "bg-blue-50 text-blue-600"}`}>
-                        {lead.consultation_type === "in_clinic" ? "In-Clinic" : "Online"}
+                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${lead.consultation_type === "in_person" ? "bg-orange-50 text-orange-600" : "bg-blue-50 text-blue-600"}`}>
+                        {lead.consultation_type === "in_person" ? "In-Person" : "Online"}
                       </span>
                     </td>
                   </tr>
@@ -516,31 +515,31 @@ export default function AgentPage() {
 
       {/* ── Calling Queue ── */}
       {(callingLeads.length > 0 || queueLeads.length > 0) && (
-        <div className="bg-white rounded-2xl border border-violet-100 p-6 space-y-4">
+        <div className="bg-white rounded-2xl border border-blue-100 p-6 space-y-4">
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-base font-semibold text-gray-900 flex items-center gap-2">
                 <span className="relative flex h-2.5 w-2.5">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-violet-400 opacity-75" />
-                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-violet-600" />
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75" />
+                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-blue-600" />
                 </span>
                 Call Queue Running
               </h2>
               <p className="text-xs text-gray-400 mt-0.5">
-                {callingLeads.length > 0 && <span className="text-violet-600 font-medium">1 active call</span>}
+                {callingLeads.length > 0 && <span className="text-blue-600 font-medium">1 active call</span>}
                 {callingLeads.length > 0 && queueLeads.length > 0 && " · "}
                 {queueLeads.length > 0 && `${queueLeads.length} waiting in queue`}
               </p>
             </div>
-            <span className="text-xs bg-violet-50 text-violet-700 font-semibold px-3 py-1.5 rounded-full">
+            <span className="text-xs bg-blue-50 text-blue-700 font-semibold px-3 py-1.5 rounded-full">
               {callingLeads.length + queueLeads.length} total
             </span>
           </div>
 
-          <div className="border border-violet-50 rounded-xl overflow-hidden">
+          <div className="border border-blue-50 rounded-xl overflow-hidden">
             <table className="w-full text-sm">
               <thead>
-                <tr className="bg-violet-50/60 text-xs text-gray-400 border-b border-violet-100">
+                <tr className="bg-blue-50/60 text-xs text-gray-400 border-b border-blue-100">
                   <th className="px-4 py-3 text-left font-medium w-10">#</th>
                   <th className="px-4 py-3 text-left font-medium">Patient Name</th>
                   <th className="px-4 py-3 text-left font-medium">Phone</th>
@@ -548,20 +547,20 @@ export default function AgentPage() {
                   <th className="px-4 py-3 text-left font-medium">Status</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-violet-50/60">
+              <tbody className="divide-y divide-blue-50/60">
                 {callingLeads.map((lead) => (
-                  <tr key={lead.id} className="bg-violet-50/30">
+                  <tr key={lead.id} className="bg-blue-50/30">
                     <td className="px-4 py-3">
                       <span className="relative flex h-2 w-2">
-                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-violet-400 opacity-75" />
-                        <span className="relative inline-flex rounded-full h-2 w-2 bg-violet-600" />
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75" />
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-600" />
                       </span>
                     </td>
-                    <td className="px-4 py-3 font-semibold text-violet-700">{lead.full_name || "—"}</td>
+                    <td className="px-4 py-3 font-semibold text-blue-700">{lead.full_name || "—"}</td>
                     <td className="px-4 py-3 text-gray-500 font-mono text-xs">{lead.phone}</td>
                     <td className="px-4 py-3 text-gray-500 text-xs truncate max-w-[160px]">{lead.inquiry_type || "—"}</td>
                     <td className="px-4 py-3">
-                      <span className="flex items-center gap-1.5 text-xs font-medium text-violet-600">
+                      <span className="flex items-center gap-1.5 text-xs font-medium text-blue-600">
                         <Loader2 className="w-3 h-3 animate-spin" /> Calling now
                       </span>
                     </td>

@@ -2,33 +2,37 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import Image from "next/image";
 import {
   LayoutDashboard,
-  Bot,
   Users,
   Phone,
   CalendarDays,
-  BookOpen,
   Settings,
   LogOut,
   BarChart2,
   Zap,
+  Building2,
+  Megaphone,
+  PhoneCall,
+  Puzzle,
+  BookOpen,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { logout } from "@/lib/api";
 import { useRouter } from "next/navigation";
 
 const NAV = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/leads", label: "Leads", icon: Users },
-  { href: "/agent", label: "AI Agent", icon: Bot },
-  { href: "/calls", label: "Calls", icon: Phone },
-  { href: "/appointments", label: "Appointments", icon: CalendarDays },
-  { href: "/knowledge-base", label: "Knowledge Base", icon: BookOpen },
-  { href: "/analytics", label: "Analytics", icon: BarChart2 },
-  { href: "/usage", label: "Usage", icon: Zap },
-  { href: "/settings", label: "Settings", icon: Settings },
+  { href: "/dashboard",    label: "Dashboard",    icon: LayoutDashboard, section: null },
+  { href: "/setup",        label: "Setup Guide",  icon: BookOpen,        section: "Setup" },
+  { href: "/integrations", label: "Integrations", icon: Puzzle,          section: null },
+  { href: "/clients",      label: "Clients",      icon: Building2,       section: null },
+  { href: "/campaigns",    label: "Campaigns",    icon: Megaphone,       section: null },
+  { href: "/leads",        label: "Leads",        icon: Users,           section: "Workspace" },
+  { href: "/calls",        label: "Calls",        icon: Phone,           section: null },
+  { href: "/appointments", label: "Appointments", icon: CalendarDays,    section: null },
+  { href: "/analytics",    label: "Analytics",    icon: BarChart2,       section: "Insights" },
+  { href: "/usage",        label: "Usage",        icon: Zap,             section: null },
+  { href: "/settings",     label: "Settings",     icon: Settings,        section: null },
 ];
 
 export function Sidebar() {
@@ -41,68 +45,67 @@ export function Sidebar() {
     router.push("/login");
   };
 
-  return (
-    <aside className="w-60 min-h-screen bg-white border-r border-violet-100/60 flex flex-col shadow-sm">
-      {/* Brand header — purple gradient with photo */}
-      <div className="relative overflow-hidden px-5 py-5 border-b border-violet-100/60 bg-gradient-to-br from-violet-600 to-purple-700">
-        {/* Decorative circles */}
-        <div className="absolute -top-6 -right-6 w-24 h-24 rounded-full bg-white/10 pointer-events-none" />
-        <div className="absolute -bottom-4 -left-4 w-16 h-16 rounded-full bg-pink-400/20 pointer-events-none" />
+  let lastSection: string | null = "___init___";
 
-        <div className="relative flex items-center gap-3">
-          <div className="relative w-11 h-11 shrink-0">
-            <Image
-              src="/vidushi-logo.png"
-              alt="Vidushi Infotech"
-              fill
-              className="rounded-full object-cover object-top ring-2 ring-white/60"
-              onError={(e) => {
-                const target = e.currentTarget as HTMLImageElement;
-                target.style.display = "none";
-                const fallback = target.nextElementSibling as HTMLElement | null;
-                if (fallback) fallback.style.display = "flex";
-              }}
-            />
-            <div className="hidden w-11 h-11 rounded-full bg-white/20 items-center justify-center absolute inset-0 border-2 border-white/40">
-              <span className="text-white text-sm font-bold">VI</span>
-            </div>
+  return (
+    <aside className="w-60 min-h-screen bg-[#0f172a] flex flex-col">
+      {/* Brand */}
+      <div className="px-5 py-5 border-b border-white/5">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center shrink-0 shadow-lg shadow-blue-900/40">
+            <PhoneCall className="w-4 h-4 text-white" />
           </div>
           <div className="min-w-0">
             <p className="text-sm font-bold text-white leading-tight truncate">Vidushi Infotech</p>
-            <p className="text-[10px] text-violet-200 font-medium leading-tight mt-0.5">AI Calling Platform</p>
+            <p className="text-[10px] text-slate-400 font-medium leading-tight">AI Calling Platform</p>
           </div>
         </div>
       </div>
 
       {/* Nav */}
-      <nav className="flex-1 px-3 py-4 space-y-0.5">
-        {NAV.map(({ href, label, icon: Icon }) => {
-          const active = href === "/dashboard" ? pathname === "/dashboard" : pathname.startsWith(href);
+      <nav className="sidebar-nav flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
+        {NAV.map(({ href, label, icon: Icon, section }) => {
+          const active = href === "/dashboard"
+            ? pathname === "/dashboard"
+            : pathname.startsWith(href);
+
+          const showSection = section && section !== lastSection;
+          if (section !== lastSection) lastSection = section;
+
           return (
-            <Link
-              key={href}
-              href={href}
-              className={cn(
-                "flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all",
-                active
-                  ? "bg-violet-50 text-violet-700 shadow-sm"
-                  : "text-gray-500 hover:text-gray-900 hover:bg-gray-50"
+            <div key={href}>
+              {showSection && (
+                <p className="px-3 pt-4 pb-1.5 text-[9px] font-bold text-slate-500 uppercase tracking-widest">
+                  {section}
+                </p>
               )}
-            >
-              <Icon className={cn("w-4 h-4 shrink-0", active ? "text-violet-600" : "text-gray-400")} />
-              {label}
-            </Link>
+              <Link
+                href={href}
+                className={cn(
+                  "flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all",
+                  active
+                    ? "bg-blue-600 text-white shadow-lg shadow-blue-900/30"
+                    : "text-slate-400 hover:text-white hover:bg-white/5"
+                )}
+              >
+                <Icon className={cn("w-4 h-4 shrink-0 transition-colors", active ? "text-white" : "text-slate-500")} />
+                {label}
+                {active && (
+                  <span className="ml-auto w-1.5 h-1.5 rounded-full bg-white/60" />
+                )}
+              </Link>
+            </div>
           );
         })}
       </nav>
 
-      {/* Logout */}
-      <div className="px-3 py-4 border-t border-gray-100">
+      {/* User / Logout */}
+      <div className="px-3 py-4 border-t border-white/5">
         <button
           onClick={handleLogout}
-          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-gray-500 hover:text-red-600 hover:bg-red-50 transition-all"
+          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition-all group"
         >
-          <LogOut className="w-4 h-4" />
+          <LogOut className="w-4 h-4 group-hover:text-red-400 transition-colors" />
           Logout
         </button>
       </div>

@@ -80,10 +80,9 @@ class CallingConfig(Base):
     max_retries = Column(Integer, default=3)
     retry_gap_hours = Column(Integer, default=24)
 
-    # Phone number provider — the telephony company providing the India calling number
-    phone_provider = Column(
-        String(30), nullable=True
-    )  # twilio / plivo / exotel / vonage / airtel / msg91 / custom
+    # Currently-active SIP provider ("vobiz" / "twilio") — set by activate_provider()
+    # in services/sip_provisioning_service.py, not edited directly.
+    phone_provider = Column(String(30), nullable=True)
 
     # Vapi outbound phone number (Vapi phoneNumberId — the "from" number for outbound calls)
     phone_number_id = Column(String(100), nullable=True)
@@ -104,16 +103,26 @@ class CallingConfig(Base):
     livekit_url = Column(Text, nullable=True)
     livekit_api_key = Column(Text, nullable=True)  # encrypted
     livekit_api_secret = Column(Text, nullable=True)  # encrypted
-    livekit_sip_trunk_id = Column(String(100), nullable=True)
 
-    # Twilio credentials (SIP trunk for outbound calls) — stored encrypted at rest
+    # Currently-ACTIVE LiveKit SIP trunk/rule — mirrors whichever provider's own
+    # trunk fields below is currently selected via phone_provider. trigger_livekit_call()
+    # always dials through these three regardless of provider; see
+    # services/sip_provisioning_service.py for how they're set.
+    livekit_sip_trunk_id = Column(String(100), nullable=True)
+    inbound_sip_trunk_id = Column(String(100), nullable=True)
+    livekit_dispatch_rule_id = Column(String(100), nullable=True)
+    inbound_phone_number = Column(String(30), nullable=True)  # display only
+
+    # Twilio credentials (account-level REST API) — stored encrypted at rest
     twilio_account_sid = Column(Text, nullable=True)  # encrypted
     twilio_auth_token = Column(Text, nullable=True)  # encrypted
     twilio_from_number = Column(String(30), nullable=True)
 
-    # Inbound SIP — separate trunk for receiving calls (optional)
-    inbound_sip_trunk_id = Column(String(100), nullable=True)
-    inbound_phone_number = Column(String(30), nullable=True)  # display only
+    # Twilio's own LiveKit SIP trunk — built by hand in the LiveKit Cloud console
+    # (this app never automates Twilio's side), pasted in once.
+    twilio_outbound_trunk_id = Column(String(100), nullable=True)
+    twilio_inbound_trunk_id = Column(String(100), nullable=True)
+    twilio_dispatch_rule_id = Column(String(100), nullable=True)
 
     # VoBiz credentials — SIP trunk provider (130+ countries), stored encrypted at rest
     # Get from console.vobiz.ai → SIP Trunk settings
@@ -123,6 +132,19 @@ class CallingConfig(Base):
     vobiz_sip_domain = Column(String(255), nullable=True)  # <your-domain>.sip.vobiz.ai
     vobiz_sip_username = Column(Text, nullable=True)  # encrypted — SIP trunk username
     vobiz_sip_password = Column(Text, nullable=True)  # encrypted — SIP trunk password
+    vobiz_trunk_id = Column(
+        String(100), nullable=True
+    )  # VoBiz-side trunk ID, used to PATCH inbound_destination
+
+    # VoBiz's own LiveKit SIP trunk — auto-provisioned by this app (created on first
+    # Activate, updated in place on every later Activate to match saved credentials).
+    vobiz_outbound_trunk_id = Column(String(100), nullable=True)
+    vobiz_inbound_trunk_id = Column(String(100), nullable=True)
+    vobiz_dispatch_rule_id = Column(String(100), nullable=True)
+
+    # LiveKit project SIP URI (e.g. your-project.sip.livekit.cloud) — pasted once from
+    # LiveKit Cloud → Settings → Project. Needed to point VoBiz's inbound routing at LiveKit.
+    livekit_sip_uri = Column(String(255), nullable=True)
 
     is_active = Column(Boolean, default=True)
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())

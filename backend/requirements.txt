@@ -53,3 +53,6 @@ openpyxl
 # ── Google Gemini (swap back when billing enabled) ────────────────────────────
 livekit-plugins-google
 google-genai
+
+# ── Phone number normalization (E.164 / libphonenumber) ──────────────────────
+phonenumbers
