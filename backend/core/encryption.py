@@ -12,8 +12,11 @@ Usage:
     plain  = decrypt(stored)             # use this at runtime
 """
 
+import logging
 import os
 from cryptography.fernet import Fernet, InvalidToken
+
+logger = logging.getLogger("encryption")
 
 _fernet: Fernet | None = None
 
@@ -45,7 +48,10 @@ def decrypt(token: str | None) -> str | None:
     try:
         return _get_fernet().decrypt(token.encode()).decode()
     except InvalidToken:
-        # Value may already be plaintext (migration scenario) — return as-is
+        logger.warning(
+            "decrypt(): failed to decrypt value (not a valid Fernet token). "
+            "Returning raw value — check that ENCRYPTION_KEY matches the key used to encrypt this value."
+        )
         return token
 
 

@@ -49,3 +49,6 @@ dev.log
 .idea/
 *.swp
 *.swo
+
+# ── Accidental nested duplicate (frontend copied into itself) ────────────────
+frontend/frontend/

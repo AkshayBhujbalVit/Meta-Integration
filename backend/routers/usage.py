@@ -2,21 +2,22 @@ from datetime import datetime, timedelta
 from typing import Optional
 
 from fastapi import APIRouter, Depends
-from sqlalchemy.orm import Session
 from sqlalchemy import func
+from sqlalchemy.orm import Session
 
 from core.database import get_db
 from core.dependencies import get_current_admin
 from models.models.call import CallLog
+from models.models.lead import Lead
 from models.models.sms import SMSLog
 from models.models.whatsapp_log import WhatsAppMessage
 
 router = APIRouter(prefix="/usage", tags=["Usage"])
 
-# Estimated rates (USD)
-RATE_CALL_PER_MIN = 0.07    # OpenAI Realtime + Twilio SIP combined
-RATE_SMS_PER_MSG  = 0.008   # Twilio SMS
-RATE_WA_PER_MSG   = 0.005   # Twilio WhatsApp
+# Estimated rates (USD) — LiveKit + Gemini Live + Twilio
+RATE_CALL_PER_MIN = 0.07    # LiveKit SIP (~$0.013/min) + Gemini Live (~$0.06/min combined)
+RATE_SMS_PER_MSG  = 0.008   # Twilio SMS (~$0.0075/msg)
+RATE_WA_PER_MSG   = 0.005   # Twilio / Meta Cloud WhatsApp
 
 
 def _since(period: str) -> Optional[datetime]:
@@ -86,6 +87,31 @@ def usage_overview(
         wa_unique_q = wa_unique_q.filter(WhatsAppMessage.created_at >= since)
     wa_unique = wa_unique_q.scalar() or 0
 
+    # ── Leads intake ───────────────────────────────────────────────────────────
+    lq = db.query(Lead)
+    if since:
+        lq = lq.filter(Lead.created_at >= since)
+    total_leads = lq.count()
+
+    leads_by_source_q = (
+        db.query(Lead.source_platform, func.count(Lead.id))
+        .group_by(Lead.source_platform)
+    )
+    if since:
+        leads_by_source_q = leads_by_source_q.filter(Lead.created_at >= since)
+
+    leads_by_status_q = (
+        db.query(Lead.status, func.count(Lead.id))
+        .group_by(Lead.status)
+    )
+    if since:
+        leads_by_status_q = leads_by_status_q.filter(Lead.created_at >= since)
+
+    called_leads_q = db.query(func.count(Lead.id)).filter(Lead.call_count > 0)
+    if since:
+        called_leads_q = called_leads_q.filter(Lead.created_at >= since)
+    called_leads = called_leads_q.scalar() or 0
+
     # ── Cost estimates ─────────────────────────────────────────────────────────
     est_call = round(total_minutes * RATE_CALL_PER_MIN, 2)
     est_sms  = round(total_sms * RATE_SMS_PER_MSG, 2)
@@ -93,6 +119,12 @@ def usage_overview(
 
     return {
         "period": period,
+        "leads": {
+            "total": total_leads,
+            "called": called_leads,
+            "by_source": {(k or "manual"): v for k, v in leads_by_source_q.all()},
+            "by_status": {(k or "new"): v for k, v in leads_by_status_q.all()},
+        },
         "calls": {
             "total": total_calls,
             "total_minutes": total_minutes,
@@ -111,7 +143,7 @@ def usage_overview(
             "total": total_wa,
             "inbound": wa_inbound,
             "outbound": total_wa - wa_inbound,
-            "unique_patients": wa_unique,
+            "unique_leads": wa_unique,
             "est_cost_usd": est_wa,
         },
         "cost_summary": {

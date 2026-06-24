@@ -8,7 +8,7 @@ POSTGRES_USER = os.getenv("POSTGRES_USER", "postgres")
 POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD", "")
 POSTGRES_HOST = os.getenv("POSTGRES_HOST", "localhost")
 POSTGRES_PORT = os.getenv("POSTGRES_PORT", "5432")
-POSTGRES_DB = os.getenv("POSTGRES_DB", "sonali_gupta_livekit")
+POSTGRES_DB = os.getenv("POSTGRES_DB", "vidushi_meta_saas")
 
 # ── App security ──────────────────────────────────────────────────────────────
 SECRET_KEY = os.getenv("SECRET_KEY", "")
@@ -19,7 +19,7 @@ if not SECRET_KEY:
     )
 
 ALGORITHM = os.getenv("ALGORITHM", "HS256")
-ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "1440"))
+ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "480"))  # default 8h
 
 # ENCRYPTION_KEY is validated lazily by core.encryption when first used
 ENCRYPTION_KEY = os.getenv("ENCRYPTION_KEY", "")
@@ -45,6 +45,18 @@ TWILIO_FROM_NUMBER = os.getenv("TWILIO_FROM_NUMBER", "")
 
 # ── Webhook ───────────────────────────────────────────────────────────────────
 BACKEND_PUBLIC_URL = os.getenv("BACKEND_PUBLIC_URL", "http://localhost:8009")
+
+# ── Meta / Facebook ───────────────────────────────────────────────────────────
+META_APP_ID = os.getenv("META_APP_ID", "")           # from developers.facebook.com → Your App → Basic Settings
+META_APP_SECRET = os.getenv("META_APP_SECRET", "")   # same page, App Secret
+META_VERIFY_TOKEN = os.getenv("META_VERIFY_TOKEN", "")
+
+# ── HubSpot OAuth ─────────────────────────────────────────────────────────────
+HUBSPOT_CLIENT_ID = os.getenv("HUBSPOT_CLIENT_ID", "")       # from app.hubspot.com → Your App → Auth
+HUBSPOT_CLIENT_SECRET = os.getenv("HUBSPOT_CLIENT_SECRET", "")  # same page, Client Secret
+
+# ── Frontend public URL (for OAuth redirects back to the browser) ─────────────
+FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
 
 # ── Uploads ───────────────────────────────────────────────────────────────────
 UPLOAD_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "uploads")

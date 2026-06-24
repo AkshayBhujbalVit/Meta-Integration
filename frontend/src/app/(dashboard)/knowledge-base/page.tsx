@@ -96,13 +96,13 @@ export default function KnowledgeBasePage() {
       <div className="w-56 bg-white border-r border-gray-100 flex-shrink-0 overflow-y-auto">
         <div className="p-4 border-b border-gray-100">
           <h2 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
-            <BookOpen className="w-4 h-4 text-violet-500" /> Knowledge Base
+            <BookOpen className="w-4 h-4 text-blue-500" /> Knowledge Base
           </h2>
         </div>
         <nav className="p-2 space-y-0.5">
           {sections.map((s) => (
             <button key={s.slug} onClick={() => { setActiveSlug(s.slug); setShowAdd(false); setEditing(null); }}
-              className={`w-full text-left px-3 py-2.5 rounded-lg text-sm transition ${activeSlug === s.slug ? "bg-violet-50 text-violet-700 font-medium" : "text-gray-500 hover:text-gray-900 hover:bg-gray-50"}`}>
+              className={`w-full text-left px-3 py-2.5 rounded-lg text-sm transition ${activeSlug === s.slug ? "bg-blue-50 text-blue-700 font-medium" : "text-gray-500 hover:text-gray-900 hover:bg-gray-50"}`}>
               {s.name}
             </button>
           ))}
@@ -128,7 +128,7 @@ export default function KnowledgeBasePage() {
                   <input type="file" accept=".pdf,.docx" className="hidden" onChange={handleUpload} />
                 </label>
                 <button onClick={() => { setShowAdd(true); setEditing(null); }}
-                  className="flex items-center gap-2 px-3 py-2 bg-violet-600 hover:bg-violet-700 text-white text-sm font-medium rounded-lg transition">
+                  className="flex items-center gap-2 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition">
                   <Plus className="w-4 h-4" /> Add Q&A
                 </button>
               </div>
@@ -136,17 +136,17 @@ export default function KnowledgeBasePage() {
 
             {/* Add form */}
             {showAdd && (
-              <div className="bg-violet-50 border border-violet-100 rounded-xl p-4 space-y-3">
-                <h3 className="text-sm font-medium text-violet-800">New Q&A Item</h3>
+              <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 space-y-3">
+                <h3 className="text-sm font-medium text-blue-800">New Q&A Item</h3>
                 <input value={newQ} onChange={(e) => setNewQ(e.target.value)}
                   placeholder="Question…"
-                  className="w-full px-3 py-2 text-sm border border-violet-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500 bg-white" />
+                  className="w-full px-3 py-2 text-sm border border-blue-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white" />
                 <textarea value={newA} onChange={(e) => setNewA(e.target.value)}
                   placeholder="Answer…" rows={3}
-                  className="w-full px-3 py-2 text-sm border border-violet-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500 bg-white resize-none" />
+                  className="w-full px-3 py-2 text-sm border border-blue-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white resize-none" />
                 <div className="flex gap-2">
                   <button onClick={() => addMutation.mutate()} disabled={!newQ || !newA || addMutation.isPending}
-                    className="flex items-center gap-2 px-4 py-2 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition">
+                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition">
                     {addMutation.isPending && <Loader2 className="w-3.5 h-3.5 animate-spin" />} Save
                   </button>
                   <button onClick={() => { setShowAdd(false); setNewQ(""); setNewA(""); }}
@@ -159,7 +159,7 @@ export default function KnowledgeBasePage() {
 
             {/* Items */}
             {itemsLoading ? (
-              <div className="flex items-center justify-center h-32"><Loader2 className="w-5 h-5 animate-spin text-violet-500" /></div>
+              <div className="flex items-center justify-center h-32"><Loader2 className="w-5 h-5 animate-spin text-blue-500" /></div>
             ) : items.length === 0 ? (
               <div className="text-center py-12 text-gray-400 text-sm">No items yet — add one above</div>
             ) : (
@@ -169,13 +169,13 @@ export default function KnowledgeBasePage() {
                     {editing === item.id ? (
                       <div className="space-y-3">
                         <input value={editQ} onChange={(e) => setEditQ(e.target.value)}
-                          className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500" />
+                          className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
                         <textarea value={editA} onChange={(e) => setEditA(e.target.value)} rows={3}
-                          className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500 resize-none" />
+                          className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" />
                         <div className="flex gap-2">
                           <button onClick={() => updateMutation.mutate({ id: item.id })}
                             disabled={updateMutation.isPending}
-                            className="flex items-center gap-1.5 px-3 py-1.5 bg-violet-600 text-white text-xs font-medium rounded-lg transition">
+                            className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-lg transition">
                             {updateMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />} Save
                           </button>
                           <button onClick={() => setEditing(null)}

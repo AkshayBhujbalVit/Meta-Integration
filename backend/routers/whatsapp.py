@@ -160,11 +160,9 @@ async def _generate_reply(phone: str, message: str, lead: Lead | None, db: Sessi
 
 
 def _build_whatsapp_prompt(lead: Lead | None, db: Session) -> str:
-    clinic = db.query(ClinicSettings).first()
-    clinic_name = clinic.clinic_name if clinic else "Dr. Sonal Gupta Clinic"
-    doctor_name = clinic.doctor_name if clinic else "Dr. Sonal Gupta"
+    settings = db.query(ClinicSettings).first()
+    business_name = settings.clinic_name if settings and settings.clinic_name else "our company"
 
-    # Get upcoming appointment if any
     appt_info = ""
     if lead:
         upcoming = (
@@ -179,7 +177,7 @@ def _build_whatsapp_prompt(lead: Lead | None, db: Session) -> str:
         )
         if upcoming:
             appt_info = (
-                f"\nPatient has an upcoming appointment on "
+                f"\nLead has an upcoming appointment on "
                 f"{upcoming.appointment_date.strftime('%d %b %Y at %I:%M %p')} "
                 f"({upcoming.appointment_type})."
             )
@@ -187,13 +185,12 @@ def _build_whatsapp_prompt(lead: Lead | None, db: Session) -> str:
     lead_info = ""
     if lead:
         lead_info = (
-            f"\nPatient name: {lead.full_name or 'Unknown'}"
+            f"\nLead name: {lead.full_name or 'Unknown'}"
             f"\nInquiry: {lead.inquiry_type or 'General'}"
             f"\nStatus: {lead.status}"
             f"{appt_info}"
         )
 
-    # Inject a few FAQ KB items
     faqs = _get_faq_items(db)
     faq_block = ""
     if faqs:
@@ -201,17 +198,14 @@ def _build_whatsapp_prompt(lead: Lead | None, db: Session) -> str:
             f"Q: {f['q']}\nA: {f['a']}" for f in faqs
         )
 
-    return f"""You are the WhatsApp assistant for {clinic_name} ({doctor_name} — Women's Health & Fertility Specialist, 21+ years experience, Agra).
+    return f"""You are the WhatsApp assistant for {business_name}.
 
-Your job is to respond warmly and helpfully to patient messages on WhatsApp.
-- Respond in the SAME LANGUAGE the patient uses (Hindi, Marathi, or English).
+Your job is to respond warmly and helpfully to messages on WhatsApp.
+- Respond in the SAME LANGUAGE the person uses (Hindi, Marathi, or English).
 - Keep replies SHORT — 2-4 sentences max. WhatsApp is informal.
-- For appointment booking requests: ask for preferred date, time, and whether online or in-clinic.
-- For reschedule/cancel requests: confirm you'll pass this to the clinic team.
-- NEVER give medical diagnoses or specific medication advice.
-- NEVER quote specific fees — say "fees ke liye clinic team se poochh lein".
-- Clinic address: Ojas Hospital, Kamla Nagar, Agra | Mon-Sat 9AM-7PM
-- Online consultations are available from any city.
+- For booking requests: ask for preferred date, time, and whether online or in-person.
+- For reschedule/cancel requests: confirm you'll pass this to the team.
+- NEVER invent information you don't have.
 {lead_info}
 {faq_block}"""
 
@@ -379,7 +373,7 @@ async def _handle_appointment_action(message: str, lead: Lead | None, db: Sessio
             f"Namaste {first_name} ji 🙏\n\n"
             f"Aapki appointment {date_str} cancel ho gayi hai.\n\n"
             "Naya appointment book karne ke liye is number par WhatsApp karein.\n\n"
-            "— Dr. Sonal Gupta Clinic"
+            "— Our Team"
         )
 
     if _is_reschedule_intent(message) and appt:
@@ -392,7 +386,7 @@ async def _handle_appointment_action(message: str, lead: Lead | None, db: Sessio
             f"Aapki request note ho gayi hai — aap {date_str} ki appointment reschedule karna chahte hain.\n\n"
             "Apna preferred naya date aur time is message par reply karein. "
             "Hamari team jald confirm karegi. 😊\n\n"
-            "— Dr. Sonal Gupta Clinic"
+            "— Our Team"
         )
 
     return None
@@ -401,7 +395,7 @@ async def _handle_appointment_action(message: str, lead: Lead | None, db: Sessio
 def _fallback_reply(lead: Lead | None) -> str:
     name = (lead.full_name or "").split()[0] if lead and lead.full_name else "ji"
     return (
-        f"Namaste {name} ji! 🙏 Dr. Sonal Gupta Clinic mein aapka swagat hai. "
+        f"Namaste {name} ji! 🙏 Aapka swagat hai. "
         "Appointment book karne ya kisi bhi inquiry ke liye please hume call karein "
         "ya yahan message karein. Hamari team aapki madad karegi. 😊"
     )

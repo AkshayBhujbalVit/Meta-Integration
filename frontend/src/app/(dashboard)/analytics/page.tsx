@@ -3,13 +3,8 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
-  getAnalyticsOverview,
-  getAnalyticsFunnel,
-  getAnalyticsHeatmap,
-  getAnalyticsTrends,
-  getInquiryBreakdown,
-  getCityBreakdown,
-  exportLeads,
+  getAnalyticsOverview, getAnalyticsFunnel, getAnalyticsHeatmap,
+  getAnalyticsTrends, exportLeads, getDashboardOverview,
 } from "@/lib/api";
 import {
   BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip,
@@ -17,29 +12,45 @@ import {
 } from "recharts";
 import {
   Users, Phone, CalendarCheck, TrendingUp, Download,
-  PhoneIncoming, MessageSquare, Clock,
+  PhoneIncoming, MessageSquare, Clock, Share2, Search,
+  Briefcase, Mail, Building2, ArrowRight,
 } from "lucide-react";
+import Link from "next/link";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface FunnelStep { label: string; count: number; pct_of_prev: number; }
 interface HeatmapBucket { hour: number; label: string; total_calls: number; answered: number; answer_rate: number; }
 interface TrendPoint { date: string; leads: number; calls: number; appointments: number; }
-interface InquiryRow { inquiry_type: string; count: number; }
-interface CityRow { city: string; count: number; }
+interface PlatformStat { platform: string; total: number; called: number; booked: number; conv_pct: number; }
+interface ClientStat { id: number; name: string; business_type: string; total_leads: number; booked: number; active_campaigns: number; }
 
-// ── Colours ───────────────────────────────────────────────────────────────────
-const FUNNEL_COLORS = ["#7c3aed","#8b5cf6","#a78bfa","#c4b5fd","#ddd6fe","#ede9fe"];
-const HEATMAP_BASE = "#8b5cf6";
+// ── Platform metadata ─────────────────────────────────────────────────────────
+const PLATFORM_META: Record<string, { label: string; color: string; bg: string; icon: React.ElementType }> = {
+  meta:       { label: "Meta Ads",   color: "#1877F2", bg: "bg-[#1877F2]", icon: Share2    },
+  facebook:   { label: "Meta Ads",   color: "#1877F2", bg: "bg-[#1877F2]", icon: Share2    },
+  google:     { label: "Google Ads", color: "#EA4335", bg: "bg-[#EA4335]", icon: Search    },
+  google_ads: { label: "Google Ads", color: "#EA4335", bg: "bg-[#EA4335]", icon: Search    },
+  linkedin:   { label: "LinkedIn",   color: "#0A66C2", bg: "bg-[#0A66C2]", icon: Briefcase },
+  mailchimp:  { label: "Mailchimp",  color: "#FFE01B", bg: "bg-yellow-400", icon: Mail      },
+  manual:     { label: "Manual",     color: "#6B7280", bg: "bg-gray-400",   icon: Users     },
+  csv:        { label: "CSV Import", color: "#6B7280", bg: "bg-gray-400",   icon: Users     },
+};
+function getPM(key: string) {
+  return PLATFORM_META[key?.toLowerCase()] ?? { label: key, color: "#6B7280", bg: "bg-gray-400", icon: Share2 };
+}
+
+const FUNNEL_COLORS = ["#2563eb", "#3b82f6", "#60a5fa", "#93c5fd", "#bfdbfe", "#dbeafe"];
 
 function heatColor(rate: number): string {
-  // 0% → light grey, 100% → deep violet
   if (rate === 0) return "#f3f4f6";
   const intensity = Math.min(rate / 100, 1);
-  const r = Math.round(139 + (55 - 139) * intensity);   // 139 → 55
-  const g = Math.round(92  + (52  - 92 ) * intensity);  // 92  → 52
-  const b = Math.round(246 + (237 - 246) * intensity);  // 246 → 237
+  const r = Math.round(96  + (37  - 96 ) * intensity);
+  const g = Math.round(165 + (99  - 165) * intensity);
+  const b = Math.round(250 + (235 - 250) * intensity);
   return `rgb(${r},${g},${b})`;
 }
+
+import React from "react";
 
 export default function AnalyticsPage() {
   const [period, setPeriod] = useState<"7d" | "30d" | "90d">("30d");
@@ -49,15 +60,14 @@ export default function AnalyticsPage() {
   const { data: funnelData }   = useQuery({ queryKey: ["analytics", "funnel"],   queryFn: getAnalyticsFunnel });
   const { data: heatmapData }  = useQuery({ queryKey: ["analytics", "heatmap"],  queryFn: getAnalyticsHeatmap });
   const { data: trendsData }   = useQuery({ queryKey: ["analytics", "trends", period], queryFn: () => getAnalyticsTrends(period) });
-  const { data: inquiryData }  = useQuery({ queryKey: ["analytics", "inquiry"],  queryFn: getInquiryBreakdown });
-  const { data: cityData }     = useQuery({ queryKey: ["analytics", "city"],     queryFn: getCityBreakdown });
+  const { data: dashData }     = useQuery({ queryKey: ["dashboard-overview"],    queryFn: () => getDashboardOverview() as unknown as Promise<{ data: { by_platform: PlatformStat[]; clients: ClientStat[] } }> });
 
-  const ov    = overviewData?.data ?? {};
-  const funnel: FunnelStep[] = funnelData?.data?.steps ?? [];
+  const ov      = overviewData?.data ?? {};
+  const funnel: FunnelStep[]     = funnelData?.data?.steps ?? [];
   const heatmap: HeatmapBucket[] = heatmapData?.data?.heatmap ?? [];
-  const trends: TrendPoint[] = trendsData?.data?.series ?? [];
-  const inquiries: InquiryRow[] = inquiryData?.data ?? [];
-  const cities: CityRow[] = cityData?.data ?? [];
+  const trends: TrendPoint[]     = trendsData?.data?.series ?? [];
+  const byPlatform: PlatformStat[] = dashData?.data?.by_platform ?? [];
+  const clients: ClientStat[]    = dashData?.data?.clients ?? [];
 
   const handleExport = async (fmt: "excel" | "csv") => {
     setExporting(true);
@@ -69,271 +79,303 @@ export default function AnalyticsPage() {
       a.download = fmt === "excel" ? "leads_export.xlsx" : "leads_export.csv";
       a.click();
       URL.revokeObjectURL(url);
-    } catch (e) {
-      console.error("Export failed", e);
-    } finally {
-      setExporting(false);
-    }
+    } catch (e) { console.error("Export failed", e); }
+    finally { setExporting(false); }
   };
 
   return (
-    <div className="p-6 space-y-6 min-h-screen bg-gradient-to-br from-violet-50/40 via-white to-pink-50/20">
+    <div className="min-h-full bg-gray-50/60">
+      <div className="max-w-7xl mx-auto p-6 space-y-6">
 
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Analytics</h1>
-          <p className="text-sm text-gray-400 mt-0.5">Campaign performance & conversion insights</p>
-        </div>
-        <div className="flex gap-2">
-          <button
-            onClick={() => handleExport("excel")}
-            disabled={exporting}
-            className="flex items-center gap-2 px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white text-sm font-medium rounded-xl transition disabled:opacity-50"
-          >
-            <Download className="w-4 h-4" />
-            {exporting ? "Exporting…" : "Export Excel"}
-          </button>
-          <button
-            onClick={() => handleExport("csv")}
-            disabled={exporting}
-            className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 text-sm font-medium rounded-xl transition disabled:opacity-50"
-          >
-            <Download className="w-4 h-4" />
-            CSV
-          </button>
-        </div>
-      </div>
-
-      {/* KPI cards — 4 per row */}
-      <div className="grid grid-cols-4 gap-4">
-        {[
-          { label: "Total Leads",      value: ov.total_leads,           icon: Users,          color: "violet" },
-          { label: "Total Calls",      value: ov.total_calls,           icon: Phone,          color: "purple" },
-          { label: "Inbound Calls",    value: ov.inbound_calls,         icon: PhoneIncoming,  color: "indigo" },
-          { label: "Appointments",     value: ov.total_appointments,    icon: CalendarCheck,  color: "pink"   },
-          { label: "Answer Rate",      value: `${ov.answer_rate_pct}%`, icon: TrendingUp,     color: "fuchsia"},
-          { label: "Booking Rate",     value: `${ov.booking_rate_pct}%`,icon: TrendingUp,     color: "rose"   },
-          { label: "Avg Call Duration",value: ov.avg_call_duration_seconds ? `${Math.round(ov.avg_call_duration_seconds)}s` : "—", icon: Clock, color: "amber"},
-          { label: "WA Messages",      value: (ov.whatsapp_inbound ?? 0) + (ov.whatsapp_outbound ?? 0), icon: MessageSquare, color: "green"},
-        ].map(({ label, value, icon: Icon, color }) => (
-          <div key={label} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 relative overflow-hidden">
-            <div className={`w-9 h-9 rounded-xl flex items-center justify-center mb-3 bg-${color}-100`}>
-              <Icon className={`w-4 h-4 text-${color}-600`} />
-            </div>
-            <p className="text-2xl font-extrabold text-gray-900">{value ?? "—"}</p>
-            <p className="text-xs text-gray-400 mt-0.5">{label}</p>
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-black text-gray-900 tracking-tight">Analytics</h1>
+            <p className="text-sm text-gray-400 mt-0.5">Overall performance, by platform, and by client</p>
           </div>
-        ))}
-      </div>
+          <div className="flex gap-2">
+            <button onClick={() => handleExport("excel")} disabled={exporting}
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-xl transition disabled:opacity-50 shadow-sm">
+              <Download className="w-4 h-4" />
+              {exporting ? "Exporting…" : "Export Excel"}
+            </button>
+            <button onClick={() => handleExport("csv")} disabled={exporting}
+              className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 text-sm font-semibold rounded-xl transition disabled:opacity-50">
+              <Download className="w-4 h-4" /> CSV
+            </button>
+          </div>
+        </div>
 
-      {/* Row 2: Funnel + Heatmap */}
-      <div className="grid grid-cols-2 gap-5">
-
-        {/* Conversion funnel */}
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-          <h2 className="text-sm font-bold text-gray-900 mb-4">Conversion Funnel</h2>
-          {funnel.length === 0 ? (
-            <p className="text-xs text-gray-300 h-40 flex items-center justify-center">No data yet</p>
-          ) : (
-            <div className="space-y-2">
-              {funnel.map((step, i) => (
-                <div key={step.label}>
-                  <div className="flex justify-between text-xs text-gray-500 mb-0.5">
-                    <span className="font-medium text-gray-700">{step.label}</span>
-                    <span className="font-semibold">{step.count.toLocaleString()}&nbsp;
-                      <span className="text-gray-400 font-normal">({step.pct_of_prev}%)</span>
-                    </span>
-                  </div>
-                  <div className="w-full bg-gray-100 rounded-full h-2.5 overflow-hidden">
-                    <div
-                      className="h-2.5 rounded-full transition-all duration-500"
-                      style={{
-                        width: `${step.pct_of_prev}%`,
-                        backgroundColor: FUNNEL_COLORS[i % FUNNEL_COLORS.length],
-                      }}
-                    />
+        {/* ── Section 1: Overall KPIs ── */}
+        <div>
+          <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">Overall Performance</p>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            {[
+              { label: "Total Leads",       value: ov.total_leads,        icon: Users,          g: "from-blue-500 to-blue-700" },
+              { label: "Total Calls Made",  value: ov.total_calls,        icon: Phone,          g: "from-violet-500 to-violet-700" },
+              { label: "Appointments",      value: ov.total_appointments, icon: CalendarCheck,  g: "from-emerald-500 to-teal-600" },
+              { label: "Booking Rate",      value: `${ov.booking_rate_pct ?? 0}%`, icon: TrendingUp, g: "from-orange-500 to-rose-500" },
+            ].map(({ label, value, icon: Icon, g }) => (
+              <div key={label} className={`relative overflow-hidden rounded-2xl bg-gradient-to-br ${g} p-5 shadow-sm`}>
+                <div className="flex items-start justify-between mb-3">
+                  <p className="text-[10px] font-bold text-white/70 uppercase tracking-widest">{label}</p>
+                  <div className="w-8 h-8 rounded-xl bg-white/20 flex items-center justify-center">
+                    <Icon className="w-4 h-4 text-white" />
                   </div>
                 </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Heatmap — 24 hour buckets */}
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-          <h2 className="text-sm font-bold text-gray-900 mb-1">Best Time to Call (Answer Rate by Hour)</h2>
-          <p className="text-xs text-gray-400 mb-4">Darker = higher answer rate · IST</p>
-          <div className="grid grid-cols-12 gap-1">
-            {heatmap.map((b) => (
-              <div key={b.hour} className="flex flex-col items-center gap-0.5">
-                <div
-                  title={`${b.label} — ${b.answer_rate}% answered (${b.answered}/${b.total_calls})`}
-                  className="w-full rounded"
-                  style={{
-                    height: 32,
-                    backgroundColor: heatColor(b.answer_rate),
-                    border: "1px solid #e5e7eb",
-                  }}
-                />
-                <span className="text-[9px] text-gray-400">{b.hour}</span>
+                <p className="text-3xl font-black text-white leading-none">{value ?? "—"}</p>
               </div>
             ))}
           </div>
-          <div className="flex justify-between text-[9px] text-gray-300 mt-2 px-0.5">
-            <span>0% (no answer)</span>
-            <span>100% (all answered)</span>
-          </div>
-        </div>
-      </div>
 
-      {/* Row 3: Trends */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-sm font-bold text-gray-900">Daily Trends</h2>
-          <div className="flex gap-1">
-            {(["7d", "30d", "90d"] as const).map((p) => (
-              <button
-                key={p}
-                onClick={() => setPeriod(p)}
-                className={`px-3 py-1 rounded-lg text-xs font-medium transition ${
-                  period === p
-                    ? "bg-violet-600 text-white"
-                    : "bg-gray-100 text-gray-500 hover:bg-gray-200"
-                }`}
-              >
-                {p}
-              </button>
+          {/* Secondary KPIs */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mt-3">
+            {[
+              { label: "Inbound Calls",     value: ov.inbound_calls,     icon: PhoneIncoming },
+              { label: "Answer Rate",        value: `${ov.answer_rate_pct ?? 0}%`, icon: TrendingUp },
+              { label: "Avg Call Duration",  value: ov.avg_call_duration_seconds ? `${Math.round(ov.avg_call_duration_seconds)}s` : "—", icon: Clock },
+              { label: "WhatsApp Messages",  value: (ov.whatsapp_inbound ?? 0) + (ov.whatsapp_outbound ?? 0), icon: MessageSquare },
+            ].map(({ label, value, icon: Icon }) => (
+              <div key={label} className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-blue-50 flex items-center justify-center shrink-0">
+                  <Icon className="w-4 h-4 text-blue-600" />
+                </div>
+                <div>
+                  <p className="text-xl font-black text-gray-900 leading-none">{value ?? "—"}</p>
+                  <p className="text-[10px] text-gray-400 mt-0.5">{label}</p>
+                </div>
+              </div>
             ))}
           </div>
         </div>
-        <ResponsiveContainer width="100%" height={220}>
-          <LineChart data={trends} margin={{ top: 4, right: 8, bottom: 0, left: -20 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
-            <XAxis
-              dataKey="date"
-              tick={{ fontSize: 10, fill: "#9ca3af" }}
-              tickFormatter={(v) => v.slice(5)} // show MM-DD
-              interval={Math.floor(trends.length / 6)}
-            />
-            <YAxis tick={{ fontSize: 10, fill: "#9ca3af" }} allowDecimals={false} />
-            <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8, border: "1px solid #e5e7eb" }} />
-            <Line type="monotone" dataKey="leads"        stroke="#7c3aed" strokeWidth={2} dot={false} name="Leads" />
-            <Line type="monotone" dataKey="calls"        stroke="#a855f7" strokeWidth={2} dot={false} name="Calls" />
-            <Line type="monotone" dataKey="appointments" stroke="#ec4899" strokeWidth={2} dot={false} name="Appointments" />
-          </LineChart>
-        </ResponsiveContainer>
-        <div className="flex gap-5 mt-2 text-xs justify-center">
-          {[
-            { label: "Leads",        color: "#7c3aed" },
-            { label: "Calls",        color: "#a855f7" },
-            { label: "Appointments", color: "#ec4899" },
-          ].map(({ label, color }) => (
-            <span key={label} className="flex items-center gap-1.5 text-gray-500">
-              <span className="w-3 h-0.5 inline-block" style={{ backgroundColor: color }} />
-              {label}
-            </span>
-          ))}
-        </div>
-      </div>
 
-      {/* Row 4: Inquiry breakdown + City breakdown */}
-      <div className="grid grid-cols-2 gap-5">
+        {/* ── Section 2: By Platform ── */}
+        <div>
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">By Platform</p>
+            <Link href="/integrations" className="text-xs text-blue-600 font-semibold flex items-center gap-1 hover:text-blue-700">
+              Manage integrations <ArrowRight className="w-3 h-3" />
+            </Link>
+          </div>
 
-        {/* Inquiry breakdown — horizontal bar chart */}
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-          <h2 className="text-sm font-bold text-gray-900 mb-4">Leads by Inquiry Type</h2>
-          {inquiries.length === 0 ? (
-            <p className="text-xs text-gray-300 h-40 flex items-center justify-center">No data yet</p>
+          {byPlatform.length === 0 ? (
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-10 text-center">
+              <Share2 className="w-10 h-10 text-gray-100 mx-auto mb-3" />
+              <p className="text-sm font-semibold text-gray-400">No platform data yet</p>
+              <p className="text-xs text-gray-300 mt-1">Connect a marketing platform in Integrations to see breakdowns here.</p>
+            </div>
           ) : (
-            <ResponsiveContainer width="100%" height={Math.max(180, inquiries.length * 36)}>
-              <BarChart data={inquiries} layout="vertical" margin={{ left: 10, right: 10 }}>
-                <XAxis type="number" tick={{ fontSize: 10, fill: "#9ca3af" }} allowDecimals={false} />
-                <YAxis
-                  type="category"
-                  dataKey="inquiry_type"
-                  width={130}
-                  tick={{ fontSize: 10, fill: "#6b7280" }}
-                  tickFormatter={(v) => v.length > 20 ? v.slice(0, 19) + "…" : v}
-                />
-                <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8 }} />
-                <Bar dataKey="count" name="Leads" radius={[0, 4, 4, 0]}>
-                  {inquiries.map((_, i) => (
-                    <Cell key={i} fill={FUNNEL_COLORS[i % FUNNEL_COLORS.length]} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          )}
-        </div>
-
-        {/* City table */}
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-          <h2 className="text-sm font-bold text-gray-900 mb-4">Leads by City (Top 15)</h2>
-          {cities.length === 0 ? (
-            <p className="text-xs text-gray-300 h-40 flex items-center justify-center">No data yet</p>
-          ) : (
-            <div className="overflow-y-auto max-h-[300px]">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-left text-xs text-gray-400 border-b border-gray-50">
-                    <th className="pb-2 font-medium">City</th>
-                    <th className="pb-2 font-medium text-right">Leads</th>
-                    <th className="pb-2 font-medium text-right w-28">Share</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {cities.map((row, i) => {
-                    const maxCount = cities[0]?.count || 1;
-                    return (
-                      <tr key={row.city} className="border-b border-gray-50 last:border-0">
-                        <td className="py-2 font-medium text-gray-800 text-xs">{row.city}</td>
-                        <td className="py-2 text-right text-xs text-gray-600 font-mono">{row.count}</td>
-                        <td className="py-2 pl-3">
-                          <div className="flex items-center gap-2">
-                            <div className="flex-1 bg-gray-100 rounded-full h-1.5 overflow-hidden">
-                              <div
-                                className="h-1.5 rounded-full"
-                                style={{
-                                  width: `${(row.count / maxCount) * 100}%`,
-                                  backgroundColor: FUNNEL_COLORS[i % FUNNEL_COLORS.length],
-                                }}
-                              />
-                            </div>
-                            <span className="text-[10px] text-gray-400 w-8 text-right">
-                              {Math.round((row.count / (cities.reduce((s, c) => s + c.count, 0))) * 100)}%
-                            </span>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {byPlatform.map((p) => {
+                const meta = getPM(p.platform);
+                const Icon = meta.icon;
+                const callPct = p.total > 0 ? Math.round((p.called / p.total) * 100) : 0;
+                return (
+                  <div key={p.platform} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+                    {/* Card header */}
+                    <div className="flex items-center gap-3 p-4 border-b border-gray-50">
+                      <div className={`w-10 h-10 rounded-xl ${meta.bg} flex items-center justify-center shrink-0 shadow-sm`}>
+                        <Icon className="w-5 h-5 text-white" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-bold text-gray-900">{meta.label}</p>
+                        <div className="flex items-center gap-2 mt-1">
+                          <div className="h-1.5 bg-gray-100 rounded-full flex-1 overflow-hidden">
+                            <div className="h-1.5 rounded-full transition-all duration-700"
+                              style={{ width: `${callPct}%`, backgroundColor: meta.color }} />
                           </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+                          <span className="text-[10px] text-gray-400 shrink-0">{callPct}% called</span>
+                        </div>
+                      </div>
+                    </div>
+                    {/* Stats */}
+                    <div className="grid grid-cols-3 divide-x divide-gray-50">
+                      {[
+                        { label: "Leads",  value: p.total,  bold: false },
+                        { label: "Called", value: p.called, bold: false },
+                        { label: "Booked", value: p.booked, bold: true  },
+                      ].map(({ label, value, bold }) => (
+                        <div key={label} className="p-3 text-center">
+                          <p className={`text-xl font-black leading-none ${bold && value > 0 ? "text-emerald-600" : "text-gray-900"}`}>
+                            {value}
+                          </p>
+                          <p className="text-[10px] text-gray-400 mt-0.5">{label}</p>
+                        </div>
+                      ))}
+                    </div>
+                    {/* Conv rate */}
+                    {p.conv_pct > 0 && (
+                      <div className="px-4 pb-3">
+                        <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">
+                          {p.conv_pct}% conversion rate
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
-      </div>
 
-      {/* Row 5: Outcome summary table */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-        <h2 className="text-sm font-bold text-gray-900 mb-4">Outcome Summary</h2>
-        <div className="grid grid-cols-5 gap-4">
-          {[
-            { label: "Appointment Booked", value: ov.booked,           color: "bg-pink-100 text-pink-700"   },
-            { label: "Interested",         value: ov.interested,        color: "bg-violet-100 text-violet-700"},
-            { label: "Callback Requested", value: ov.callback_requested,color: "bg-orange-100 text-orange-700"},
-            { label: "Not Interested",     value: ov.not_interested,    color: "bg-red-100 text-red-600"     },
-            { label: "No Answer",          value: ov.no_answer,         color: "bg-gray-100 text-gray-500"   },
-          ].map(({ label, value, color }) => (
-            <div key={label} className={`rounded-xl p-4 ${color}`}>
-              <p className="text-2xl font-extrabold">{value ?? "—"}</p>
-              <p className="text-xs font-medium mt-0.5 opacity-80">{label}</p>
+        {/* ── Section 3: By Client ── */}
+        {clients.length > 0 && (
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">By Client</p>
+              <Link href="/clients" className="text-xs text-blue-600 font-semibold flex items-center gap-1 hover:text-blue-700">
+                Manage clients <ArrowRight className="w-3 h-3" />
+              </Link>
             </div>
-          ))}
-        </div>
-      </div>
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+              <div className="grid grid-cols-12 gap-3 px-6 py-2.5 text-[10px] font-bold text-gray-400 uppercase tracking-widest bg-gray-50/70">
+                <div className="col-span-4">Client</div>
+                <div className="col-span-2 text-right">Leads</div>
+                <div className="col-span-2 text-right">Campaigns</div>
+                <div className="col-span-2 text-right">Booked</div>
+                <div className="col-span-2 text-right">Conv %</div>
+              </div>
+              {clients.map((c, i) => {
+                const convPct = c.total_leads > 0 ? ((c.booked / c.total_leads) * 100).toFixed(1) : "0";
+                return (
+                  <Link key={c.id} href={`/clients/${c.id}`}
+                    className={`grid grid-cols-12 gap-3 px-6 py-4 items-center hover:bg-blue-50/30 transition-colors group
+                      ${i < clients.length - 1 ? "border-b border-gray-50" : ""}`}>
+                    <div className="col-span-4 flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shrink-0">
+                        <span className="text-xs font-black text-white">{c.name.charAt(0)}</span>
+                      </div>
+                      <p className="text-sm font-bold text-gray-900 group-hover:text-blue-600 transition-colors">{c.name}</p>
+                    </div>
+                    <div className="col-span-2 text-right">
+                      <span className="text-base font-black text-gray-900">{c.total_leads}</span>
+                    </div>
+                    <div className="col-span-2 text-right">
+                      <span className="text-sm text-gray-700">{c.active_campaigns}</span>
+                    </div>
+                    <div className="col-span-2 text-right">
+                      <span className={`text-sm font-bold ${c.booked > 0 ? "text-emerald-600" : "text-gray-300"}`}>{c.booked}</span>
+                    </div>
+                    <div className="col-span-2 text-right">
+                      {Number(convPct) > 0 ? (
+                        <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">{convPct}%</span>
+                      ) : (
+                        <span className="text-xs text-gray-300">—</span>
+                      )}
+                    </div>
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
+        {/* ── Section 4: Conversion Funnel + Heatmap ── */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+          {/* Funnel */}
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+            <h2 className="text-sm font-bold text-gray-900 mb-4">Conversion Funnel</h2>
+            {funnel.length === 0 ? (
+              <div className="h-40 flex items-center justify-center text-xs text-gray-300">No data yet</div>
+            ) : (
+              <div className="space-y-3">
+                {funnel.map((step, i) => (
+                  <div key={step.label}>
+                    <div className="flex justify-between text-xs text-gray-500 mb-1">
+                      <span className="font-semibold text-gray-700">{step.label}</span>
+                      <span className="font-bold text-gray-900">{step.count.toLocaleString()}
+                        <span className="font-normal text-gray-400 ml-1">({step.pct_of_prev}%)</span>
+                      </span>
+                    </div>
+                    <div className="w-full bg-gray-100 rounded-full h-2.5 overflow-hidden">
+                      <div className="h-2.5 rounded-full transition-all duration-700"
+                        style={{ width: `${step.pct_of_prev}%`, backgroundColor: FUNNEL_COLORS[i % FUNNEL_COLORS.length] }} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Heatmap */}
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+            <h2 className="text-sm font-bold text-gray-900 mb-1">Best Time to Call</h2>
+            <p className="text-xs text-gray-400 mb-4">Answer rate by hour · IST</p>
+            <div className="grid grid-cols-12 gap-1">
+              {heatmap.map((b) => (
+                <div key={b.hour} className="flex flex-col items-center gap-0.5">
+                  <div title={`${b.label} — ${b.answer_rate}% (${b.answered}/${b.total_calls})`}
+                    className="w-full rounded"
+                    style={{ height: 32, backgroundColor: heatColor(b.answer_rate), border: "1px solid #e5e7eb" }} />
+                  <span className="text-[9px] text-gray-400">{b.hour}</span>
+                </div>
+              ))}
+            </div>
+            <div className="flex justify-between text-[9px] text-gray-300 mt-2">
+              <span>Low answer rate</span>
+              <span>High answer rate</span>
+            </div>
+          </div>
+        </div>
+
+        {/* ── Section 5: Daily Trends ── */}
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-sm font-bold text-gray-900">Daily Trends</h2>
+            <div className="flex gap-1">
+              {(["7d", "30d", "90d"] as const).map((p) => (
+                <button key={p} onClick={() => setPeriod(p)}
+                  className={`px-3 py-1 rounded-lg text-xs font-semibold transition ${
+                    period === p ? "bg-blue-600 text-white shadow-sm" : "bg-gray-100 text-gray-500 hover:bg-gray-200"
+                  }`}>
+                  {p}
+                </button>
+              ))}
+            </div>
+          </div>
+          <ResponsiveContainer width="100%" height={220}>
+            <LineChart data={trends} margin={{ top: 4, right: 8, bottom: 0, left: -20 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
+              <XAxis dataKey="date" tick={{ fontSize: 10, fill: "#9ca3af" }}
+                tickFormatter={(v) => v.slice(5)} interval={Math.max(0, Math.floor(trends.length / 6))} />
+              <YAxis tick={{ fontSize: 10, fill: "#9ca3af" }} allowDecimals={false} />
+              <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8, border: "1px solid #e5e7eb" }} />
+              <Line type="monotone" dataKey="leads"        stroke="#2563eb" strokeWidth={2} dot={false} name="Leads" />
+              <Line type="monotone" dataKey="calls"        stroke="#7c3aed" strokeWidth={2} dot={false} name="Calls" />
+              <Line type="monotone" dataKey="appointments" stroke="#10b981" strokeWidth={2} dot={false} name="Appointments" />
+            </LineChart>
+          </ResponsiveContainer>
+          <div className="flex gap-5 mt-2 text-xs justify-center">
+            {[{ label: "Leads", color: "#2563eb" }, { label: "Calls", color: "#7c3aed" }, { label: "Appointments", color: "#10b981" }]
+              .map(({ label, color }) => (
+                <span key={label} className="flex items-center gap-1.5 text-gray-500">
+                  <span className="w-3 h-0.5 inline-block rounded" style={{ backgroundColor: color }} />
+                  {label}
+                </span>
+              ))}
+          </div>
+        </div>
+
+        {/* ── Section 6: Outcome summary ── */}
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+          <h2 className="text-sm font-bold text-gray-900 mb-4">Call Outcome Summary</h2>
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+            {[
+              { label: "Appointment Booked", value: ov.booked,            gradient: "from-emerald-500 to-teal-600" },
+              { label: "Interested",          value: ov.interested,        gradient: "from-blue-500 to-blue-700" },
+              { label: "Callback Requested",  value: ov.callback_requested, gradient: "from-amber-400 to-orange-500" },
+              { label: "Not Interested",      value: ov.not_interested,    gradient: "from-red-400 to-rose-600" },
+              { label: "No Answer",           value: ov.no_answer,         gradient: "from-gray-400 to-gray-500" },
+            ].map(({ label, value, gradient }) => (
+              <div key={label} className={`rounded-xl bg-gradient-to-br ${gradient} p-4`}>
+                <p className="text-2xl font-black text-white leading-none">{value ?? "—"}</p>
+                <p className="text-[10px] font-semibold text-white/70 mt-1">{label}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+
+      </div>
     </div>
   );
 }

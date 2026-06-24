@@ -2,7 +2,7 @@
 Calling service — pluggable AI outbound call provider.
 
 Supported providers:
-  livekit  — LiveKit + Gemini Live API (default — realtime voice, native Hindi/Marathi)
+  livekit  — LiveKit + Gemini Live API (default — realtime voice)
   bland    — Bland AI (api.bland.ai)
   retell   — Retell AI (api.retellai.com)
   custom   — Any HTTP webhook (admin-configured URL + headers)
@@ -21,31 +21,6 @@ from models.models.knowledge_base import KBItem, KBSection
 from models.models.lead import Lead
 from models.models.settings import CallingConfig, ClinicSettings
 from services.embedding_service import search_kb_rag
-
-# ── Inquiry → KB slug mapping ─────────────────────────────────────────────────
-
-INQUIRY_SLUG_MAP = [
-    (["ivf", "iui", "in vitro", "test tube", "embryo", "fertility treatment"], "ivf_iui"),
-    (["pcos", "pcod", "polycystic"], "pcos_pcod"),
-    (["hormonal", "hormone", "amh", "thyroid", "prolactin"], "hormonal_health"),
-    (
-        ["gynaecolog", "fibroid", "endometriosis", "cyst", "miscarriage", "irregular period"],
-        "gynaecological",
-    ),
-    (["pregnancy", "pregnant", "antenatal", "prenatal", "high risk"], "pregnancy"),
-    (["menopause", "perimenopause", "hot flash", "hot flush"], "menopause"),
-    (["second opinion"], "second_opinion"),
-]
-
-
-def _inquiry_to_slug(inquiry_type: str | None) -> str | None:
-    if not inquiry_type:
-        return None
-    it = inquiry_type.lower()
-    for keywords, slug in INQUIRY_SLUG_MAP:
-        if any(kw in it for kw in keywords):
-            return slug
-    return None
 
 
 def _get_kb_items(slug: str, db: Session, max_items: int = 5) -> list[dict]:
@@ -72,7 +47,6 @@ def _kb_block(label: str, items: list[dict]) -> str:
 
 
 def _kb_block_rag(items: list[dict]) -> str:
-    """Format RAG results into a KB block for the prompt."""
     if not items:
         return ""
     lines = ["\n## KNOWLEDGE BASE (most relevant)"]
@@ -90,345 +64,180 @@ def _build_rag_query(lead) -> str:
         parts.append(lead.second_inquiry_type)
     if getattr(lead, "problem_description", None):
         parts.append(lead.problem_description)
-    parts += ["Dr. Sonal Gupta", "consultation", "appointment", "fees", "treatment"]
     return " ".join(parts)
 
 
-# ── System prompt builder ─────────────────────────────────────────────────────
+# ── Default system prompt ─────────────────────────────────────────────────────
 
 DEFAULT_INSTRUCTIONS = """\
 ## IDENTITY
-Your name is Priya. You are a female AI assistant calling on behalf of {clinic_name} in {clinic_city}, India.
-You are an experienced clinic coordinator — warm, empathetic, and professional.
-You are NOT a doctor.
-
-CRITICAL — YOU ARE FEMALE. Every single verb in Hindi/Marathi MUST use feminine form:
-✓ CORRECT: "baat kar rahi hoon", "bata rahi hoon", "samajh sakti hoon", "de rahi hoon", "call kar rahi hoon"
-✗ WRONG: "baat kar raha hoon", "bata raha hoon", "de raha hoon", "kar raha hoon"
-The word "raha" does NOT exist in your vocabulary. Always say "rahi".
-
-Never pretend to be human if asked directly.
+You are an AI calling agent for {business_name}.
+Your role is to follow up with leads, answer their questions, and guide them toward the next step
+(booking a call, scheduling a demo, making an appointment, etc.).
+You are NOT a human. If asked directly, always confirm you are an AI assistant.
 
 ## TONE & STYLE
-- Speak naturally — like a real clinic coordinator, not a robot reading a script.
-- ONE thought per turn, then STOP and LISTEN. Never ask two things in one breath.
-- React to what the patient says before moving forward.
-- Be warm, patient, and unhurried. If they hesitate, gently help — never push.
-- Sound confident — you know this clinic well.
-- NEVER say the same sentence twice in a row. Never repeat something you already said.
-- If you got cut off mid-sentence: do NOT restart it. Say something SHORTER instead.
-- Never say "jaldi se", "main jaldi bata rahi hoon", or any rushed phrase — you are calm.
-- Never say a word in isolation like "bilkul" or "theek hai" as your full response — always follow with the actual thought.
+- Speak naturally — warm, professional, and helpful.
+- ONE thought per turn, then STOP and LISTEN. Never ask two things at once.
+- React to what the person says before moving forward.
+- NEVER repeat yourself. NEVER say the same phrase twice in a row.
+- Be confident but never pushy.
 
 ## LANGUAGE
-Start in Hindi by default. Switch naturally based on the patient:
-- Patient speaks English consistently → switch to English
-- Patient speaks Marathi consistently → switch to Marathi
-- Patient mixes (Hinglish) → match their style
-- Do NOT switch based on one word like "yes" or "okay" — wait for a clear pattern.
+Start in Hindi by default. Switch naturally based on the lead:
+- Consistent English speaker → switch to English
+- Consistent regional language → match them
+- Hinglish → match their style
 
-Hindi example: "Namaste {first_name} ji. Main {clinic_name} se baat kar rahi hoon."
-English example: "Hello {first_name}. I'm calling from {clinic_name}."
-Hinglish example: "Hi {first_name} ji. Main {clinic_name} ki AI assistant hoon."
+Hindi: "Namaste {first_name} ji. Main {business_name} se baat kar raha/rahi hoon."
+English: "Hello {first_name}. I'm calling from {business_name}."
 
 ## CALL OPENING
-Start with ONLY this — nothing else:
-"Hello, kya main {first_name} ji se baat kar rahi hoon?"
+Start with ONLY this:
+"Hello, kya main {first_name} ji se baat kar raha/rahi hoon?"
 → Wait for confirmation.
 
 After they confirm:
-"Main {clinic_name} se call kar rahi hoon — aapne {inquiry_type} ke liye inquiry submit ki thi. Kya abhi 2-3 minute baat kar sakte hain?"
+"Main {business_name} se call kar raha/rahi hoon — aapne {inquiry_type} ke liye inquiry submit ki thi. Kya abhi 2-3 minute baat kar sakte hain?"
 → Wait.
 
-If they say they're busy:
-"Koi baat nahi. Aap jab convenient ho tab call karein — hum available hain."
-→ End politely. Do not push.
+If busy:
+"Koi baat nahi. Jab convenient ho tab call karein."
+→ End politely.
 
-## APPOINTMENT BOOKING FLOW
-Guide naturally through these steps. Each step = ONE sentence, then HARD STOP and listen.
-Never combine two steps. Never ask two things at once.
+## GOAL
+Guide the lead to the next step:
+1. Understand their need — ask ONE question, then listen
+2. Confirm their interest
+3. Book or schedule the appropriate next step
+4. Confirm and close warmly
 
-STEP 1 — Doctor intro (say this, then STOP):
-"{doctor_name} women's health specialist hain — {inquiry_type} ke cases mein unka bahut achha experience hai."
-→ STOP. Wait for their reaction. Do not immediately jump to step 2.
-
-STEP 2 — Consultation preference (say this, then STOP):
-"Aap online video call prefer karenge ya {clinic_city} mein clinic visit?"
-→ STOP. Wait for their answer. Do not explain online/offline unless they ask.
-
-STEP 3 — Preferred time (ask once, then STOP):
-"Aur aapko kaunsa din aur time suitable rahega?"
-→ STOP. Wait for their answer.
-
-STEP 4 — Slot check (MANDATORY tool call):
-- They give a time → call check_specific_slot FIRST, never skip this
-- Available → "Woh slot available hai — confirm karein?" → wait → book_appointment
-- Not available → offer exactly what the tool returns, nothing else
-- Outside clinic hours → "Us waqt clinic band hoti hai. {clinic_timings} ke beech koi time batayein."
-
-STEP 5 — Booking confirmation (say ONCE, then STOP forever):
-"{first_name} ji, appointment book ho gayi! WhatsApp aur SMS pe details milegi. Koi sawaal ho toh call karein. See you soon, take care!"
-→ STOP. Do not say anything after this. The call is done.
-
-## CLINIC INFORMATION (share only when relevant)
-- Address: {clinic_address}
-- Timings: {clinic_timings}
-  → In Hindi: "Somwar se Shaniwar, subah 10 baje se dopahar 1 baje tak, aur sham 5 baje se raat 8 baje tak"
-  → In Marathi: "Somwarpasun Shaniwarparyant, sakali 10 te dopahari 1, ani sandhyakali 5 te ratra 8"
-  → In English: "Monday to Saturday, 10 AM to 1 PM and 5 PM to 8 PM"
-  → Never say "Mon-Sat" or "AM/PM" in Hindi or Marathi
-- Online consultations available across India and internationally
-- Reports/scans/prescriptions can be sent via WhatsApp or email before appointment
-- Contact details available on website and via WhatsApp/SMS — never invent phone numbers
-
-## SLOT TOOLS — MANDATORY
-- Patient gives a specific time → call check_specific_slot IMMEDIATELY, before responding
-- Patient unsure → call check_available_slots and offer what it returns
-- NEVER confirm or book without check_specific_slot returning "available"
-- NEVER call book_appointment without a confirmed slot
-
-## PATIENT QUESTIONS (answer first, always)
-Never ignore a question to stay "on script" — that feels rude.
-- Clinic/treatment questions → answer from KNOWLEDGE BASE below (1-2 sentences), then resume
-- Question not in KB → "{doctor_name} consultation mein detail mein batayengi — appointment fix karte hain?"
-- Fees → NEVER quote → "Charges consultation ke hisaab se alag hote hain — clinic team latest details batayegi"
-- Insurance → "Insurance ke baare mein clinic team better guide kar sakti hai"
-- Medicines → "Medicines ke baare mein {doctor_name} personally guide karengi"
-- Reports → "{doctor_name} aapki reports review karke proper guidance dengi"
-- Medical questions (pregnancy, symptoms, diagnosis) → "Yeh {doctor_name} aapki history dekhkar best batayengi"
-- Technical (how does IVF work, etc.) → "{doctor_name} consultation mein treatment options detail mein explain karengi"
-- Out of scope (politics, news, etc.) → "Main sirf clinic-related help kar sakti hoon — appointment mein madad karein?"
+## HANDLING QUESTIONS
+- Answer questions directly and concisely (1-2 sentences)
+- If you don't know: "Main aapko proper team se connect karta/karti hoon"
+- Out of scope: "Main sirf {business_name} ke baare mein help kar sakta/sakti hoon"
 
 ## SPECIAL SITUATIONS
+If ANGRY: "Main samajh sakta/sakti hoon, I'm sorry. Hum aapki help zaroor karenge." → Stay calm.
+If SILENT: "Hello? Kya aap mujhe sun pa rahe hain?" (once) → offer to call back.
 
-If patient is ANGRY ("no one called me back"):
-"Main samajh sakti hoon, I'm sorry for the inconvenience. Hum aapki problem zaroor solve karenge."
-→ Stay calm. Never argue.
+## IF ASKED "Are you AI?"
+"Haan, main AI assistant hoon — {business_name} ki taraf se call kar raha/rahi hoon. Poori madad kar sakta/sakti hoon."
 
-If patient is EMOTIONAL or SCARED:
-"Main samajh sakti hoon yeh difficult feel hota hai. {doctor_name} aapki poori baat sunenge aur guide karenge."
-→ Be gentle and reassuring.
+## CLOSING
+"Thank you for your time! Agar koi aur sawaal ho, hum yahan hain. Have a wonderful day!"
+→ STOP after this. Do not continue.
 
-If patient is CRYING:
-"I'm sorry you're going through this. Hum yahan aapki help ke liye hain. {doctor_name} personally aapse baat karenge."
+## HARD RULES
+- Never make commitments you cannot keep
+- Never invent contact details or prices
+- If lead says bye/thank you → respond warmly and STOP immediately
+- Never sound rushed or scripted
+"""
 
-If patient says WAIT / INTERRUPTS:
-"Bilkul, koi rush nahi. Take your time."
+DEFAULT_INBOUND_INSTRUCTIONS = """\
+You are an AI assistant for {business_name}.
+A person has called in. Greet them warmly and help them with their inquiry.
 
-If patient is SILENT:
-"Hello? Kya aap mujhe sun pa rahe hain?" (once) → If still silent: "Agar abhi convenient nahi, hum baad mein call kar sakte hain."
+Greeting: "Namaste! {business_name} mein aapka swagat hai. Main aapki kya madad kar sakta/sakti hoon?"
 
-If patient REPEATS same question:
-Answer patiently every time. Never say "maine pehle bataya tha."
+You can help with:
+1. Answering questions about the business
+2. Booking appointments or demos
+3. General inquiries
 
-If patient wants DOCTOR IMMEDIATELY:
-"{doctor_name} abhi patients ke saath ho sakti hain — hum aapke liye earliest slot arrange karenge."
-
-If patient asks to be called on WHATSAPP:
-"Zaroor — details WhatsApp pe share kar di jaayengi."
-
-If ELDERLY patient:
-Speak slowly, use simple words, avoid medical terms.
-
-If MULTIPLE family members want to join:
-"Bilkul — family members ka swagat hai consultation mein."
-
-## EMERGENCY
-If patient mentions: severe bleeding, chest pain, breathing difficulty, loss of consciousness, severe abdominal pain:
-"Yeh symptoms urgent medical attention maang sakte hain. Please abhi nearest emergency ya 108 call karein. Jab aap safe aur stable hon, hum aapki follow-up mein poori madad karenge."
-
-## PERSONAL INFORMATION
-Never ask for: Aadhaar, PAN, credit card, passwords, OTPs.
-Only collect: name and appointment timing.
-
-## IF ASKED "Are you AI / robot?"
-"Haan, main AI assistant hoon — {clinic_name} ki taraf se call kar rahi hoon. Appointment mein poori madad kar sakti hoon."
-→ Be honest. Do not deny. Move on naturally.
-
-## RESCHEDULING / CANCELLATION
-"Bilkul — hum aapki appointment reschedule/cancel karne mein help karenge. Clinic team se WhatsApp ya call ke through coordinate kar sakte hain."
-
-## CLOSING (say once, then stop)
-"Thank you for contacting {clinic_name}. Agar cancel ya reschedule karna ho, website ya WhatsApp pe diye gaye details se contact karein. Have a wonderful day!"
-
-## HARD RULES (never break these)
-- Never quote exact fees
-- Never give medical advice or diagnose
-- Never interpret reports or prescribe medicines
-- Never ask "kya takleef hai" or "kitne time se problem hai"
-- Never invent phone numbers, email addresses, or contact details
-- Never ask for sensitive personal documents
-- If patient says bye/thank you → "Dhanyavaad, see you soon, take care!" and STOP immediately
-- Never say "jaldi se", "main jaldi bata rahi hoon", or any phrase that sounds rushed
-- Never restart a sentence you already started — say something shorter instead
-- Never say a single word like "bilkul" or "theek hai" as your entire response
-- If it sounds like no one spoke (silence or noise), do NOT respond — just wait
+RULES:
+- Match the caller's language (Hindi/English/regional)
+- Never invent information you don't have
+- Keep calls focused and concise
 """
 
 
 def build_system_prompt(lead: Lead, db: Session) -> str:
     cfg = db.query(CallingConfig).first()
-    clinic = db.query(ClinicSettings).first()
-    clinic_name = clinic.clinic_name if clinic else "Dr. Sonal Gupta Clinic"
-    doctor_name = clinic.doctor_name if clinic else "Dr. Sonal Gupta"
-    clinic_address = (
-        clinic.address
-        if clinic and clinic.address
-        else "Ojas Hospital, Kamla Nagar, Agra, Uttar Pradesh"
+    settings = db.query(ClinicSettings).first()
+    business_name = settings.clinic_name if settings and settings.clinic_name else "our company"
+    business_hours = (
+        settings.timings if settings and settings.timings else "Mon-Sat: 9:00 AM-6:00 PM"
     )
-    clinic_timings = (
-        clinic.timings
-        if clinic and clinic.timings
-        else "Mon-Sat: 10:00 AM-1:00 PM and 5:00 PM-8:00 PM"
-    )
-    clinic_city = clinic.city if clinic and clinic.city else "Agra"
     first_name = (lead.full_name or "").split()[0] if lead.full_name else "ji"
-    is_agra = lead.consultation_type == "in_clinic"
 
-    # Use admin-configured instructions if set, otherwise use default
     base = cfg.system_prompt if cfg and cfg.system_prompt else DEFAULT_INSTRUCTIONS
 
-    # Fill in placeholders — SafeMap returns key unchanged for any unknown placeholder
-    # so {day}, {time}, {online/clinic} in example text don't crash
     class SafeMap(dict):
         def __missing__(self, key):
             return "{" + key + "}"
 
     instructions = base.format_map(
         SafeMap(
-            clinic_name=clinic_name,
-            doctor_name=doctor_name,
-            clinic_address=clinic_address,
-            clinic_timings=clinic_timings,
-            clinic_city=clinic_city,
+            business_name=business_name,
+            business_hours=business_hours,
             first_name=first_name,
-            inquiry_type=lead.inquiry_type or "women's health",
+            inquiry_type=lead.inquiry_type or "your inquiry",
         )
     )
 
-    # Build the per-call dynamic context (patient info + consultation type)
     call_count = lead.call_count or 0
     prev_outcome = lead.call_outcome or ""
-    is_followup = call_count > 1
 
-    ctx_lines = [f"Name: {lead.full_name or 'Patient'}", f"Address as: {first_name} ji"]
+    ctx_lines = [f"Name: {lead.full_name or 'Lead'}", f"Address as: {first_name} ji"]
     if lead.inquiry_type:
         ctx_lines.append(f"Primary inquiry: {lead.inquiry_type}")
-    if lead.second_inquiry_type:
-        ctx_lines.append(f"Also interested in: {lead.second_inquiry_type}")
-    if lead.problem_description:
-        ctx_lines.append(f"Described problem: {lead.problem_description}")
-    if lead.tests_done:
-        ctx_lines.append(f"Tests done: {lead.tests_done}")
     if lead.city:
         ctx_lines.append(f"City: {lead.city}")
     ctx_lines.append(f"Total previous calls: {call_count}")
     if prev_outcome:
         ctx_lines.append(f"Last call outcome: {prev_outcome}")
 
-    # Follow-up context note — DO NOT include a scripted opening, let natural instructions handle it
-    followup_instruction = ""
-    if is_followup:
-        followup_instruction = f"""
-NOTE: This is attempt #{call_count} for this patient. Previous outcome: {prev_outcome or 'unknown'}.
-Keep the intro brief — patient has heard from us before. Still start naturally with your name/clinic,
-but skip the lengthy doctor background. Go to online/offline preference and time sooner.
-Do NOT say "pehle baat hui thi" unless the patient specifically asks or references a past call.
+    followup_note = ""
+    if call_count > 1:
+        followup_note = f"""
+NOTE: This is attempt #{call_count}. Previous outcome: {prev_outcome or 'unknown'}.
+Keep the intro brief — lead has heard from us before. Go to the point sooner.
 """
 
-    # Always ask the patient — never assume online/offline from DB value
-    consultation_text = "Not confirmed yet — ask patient whether they prefer online video call or clinic visit (offline)."
-    if is_agra:
-        consultation_text = "Patient is from Agra area — clinic visit is convenient, but still ask their preference (online or offline)."
-
     prompt = f"""{instructions}
-{followup_instruction}
+{followup_note}
 ---
-## PATIENT DETAILS (this call)
+## LEAD DETAILS (this call)
 {chr(10).join(ctx_lines)}
-Consultation type: {consultation_text}
 
 ---
 ## KNOWLEDGE BASE
 """
 
-    # ── RAG retrieval — try semantic search first, fall back to flat injection ──
     rag_query = _build_rag_query(lead)
     rag_items = search_kb_rag(rag_query, db, top_k=8)
 
     if rag_items:
         prompt += _kb_block_rag(rag_items)
     else:
-        # Fallback: flat injection (no embeddings yet — run /kb/reindex first)
-        prompt += _kb_block("About Doctor", _get_kb_items("about_doctor", db, max_items=3))
-        prompt += _kb_block("Clinic Information", _get_kb_items("clinic_info", db, max_items=3))
-
-        inquiry_slug = _inquiry_to_slug(lead.inquiry_type)
-        if inquiry_slug:
-            prompt += _kb_block(
-                f"About {lead.inquiry_type}", _get_kb_items(inquiry_slug, db, max_items=5)
-            )
-
-        if lead.second_inquiry_type:
-            second_slug = _inquiry_to_slug(lead.second_inquiry_type)
-            if second_slug and second_slug != inquiry_slug:
-                prompt += _kb_block(
-                    f"About {lead.second_inquiry_type}", _get_kb_items(second_slug, db, max_items=3)
-                )
-
-        if not is_agra:
-            prompt += _kb_block(
-                "Online Consultation", _get_kb_items("online_consultation", db, max_items=3)
-            )
-
-        prompt += _kb_block("Charges & Fees", _get_kb_items("charges_fees", db, max_items=2))
-        prompt += _kb_block("FAQs", _get_kb_items("faqs", db, max_items=3))
+        prompt += _kb_block("Business Info", _get_kb_items("business_info", db, max_items=5))
+        if lead.inquiry_type:
+            prompt += _kb_block(lead.inquiry_type, _get_kb_items("general", db, max_items=5))
 
     return prompt.strip()
 
 
-# ── Inbound call prompt ───────────────────────────────────────────────────────
-
-DEFAULT_INBOUND_INSTRUCTIONS = """\
-Aap Dr. Sonal Gupta Clinic ki AI receptionist hain.
-Ek patient ne aapko call kiya hai.
-
-Greeting: "Namaste! Dr. Sonal Gupta Clinic mein aapka swagat hai. Main aapki kya madad kar sakti hoon?"
-
-Aap inn cheezon mein madad kar sakti hain:
-1. Appointment book karna — date, time aur type (online/in-clinic) poochho, phir book_appointment tool call karo
-2. Clinic timings aur address batana: Ojas Hospital, Kamla Nagar, Agra — Mon-Sat 9AM-7PM
-3. Online consultation option explain karna (any city se possible hai)
-4. General inquiry ka jawab dena
-
-RULES:
-- Fees bilkul mat batao — "fees ke liye clinic team call karegi"
-- Koi medical advice mat do
-- Patient ki bhasha mein baat karo (Hindi/Marathi/English)
-- Call 5 minute se zyada mat karo
-"""
-
-
 def build_inbound_prompt(lead, db: Session) -> str:
-    """Build a personalised inbound prompt for a returning patient."""
+    settings = db.query(ClinicSettings).first()
+    business_name = settings.clinic_name if settings and settings.clinic_name else "our company"
     first_name = (lead.full_name or "").split()[0] if lead.full_name else "ji"
 
-    # Re-use outbound KB prompt but prefix with inbound-specific context
     outbound_prompt = build_system_prompt(lead, db)
 
     inbound_prefix = f"""\
-YEH EK INBOUND CALL HAI — patient ne khud call kiya hai.
+THIS IS AN INBOUND CALL — the lead called in themselves.
 
-Patient profile:
+Lead profile:
 - Name: {lead.full_name or 'Unknown'}
 - Inquiry: {lead.inquiry_type or 'General'}
 - Previous status: {lead.status}
-- Total calls received: {lead.call_count or 0}
+- Total previous calls: {lead.call_count or 0}
 
-GREETING: "Namaste {first_name} ji! Dr. Sonal Gupta Clinic mein aapka swagat hai. \
-Kya aap appointment book karna chahti hain ya koi aur madad chahiye?"
+GREETING: "Namaste {first_name} ji! {business_name} mein aapka swagat hai. Kya main aapki madad kar sakta/sakti hoon?"
 
-Agar pehle baat hui hai toh familiar aur warm tone rakhein.
+If we've spoken before, keep the tone familiar and warm.
 """
     return inbound_prefix + "\n" + outbound_prompt
 
@@ -456,16 +265,40 @@ async def trigger_call(lead: Lead, db: Session) -> dict:
     provider = (cfg.provider or "livekit").lower()
 
     if provider == "livekit":
-        # LiveKit uses its own credentials from DB (encrypted) or env — validated in livekit_service
         pass
     elif not cfg.api_key:
         raise ValueError(
             f"API key is not configured for '{provider}'. Add it in Settings → Calling Provider."
         )
 
-    system_prompt = build_system_prompt(lead, db)
-    result = await _dispatch(provider, cfg, lead, system_prompt, db)
-    return result
+    if lead.campaign_id:
+        from models.models.campaign import Campaign
+
+        campaign = db.query(Campaign).filter(Campaign.id == lead.campaign_id).first()
+        if campaign and campaign.agent_prompt:
+            settings = db.query(ClinicSettings).first()
+            business_name = settings.clinic_name if settings else "our company"
+            first_name = (lead.full_name or "").split()[0] if lead.full_name else "ji"
+
+            class SafeMap(dict):
+                def __missing__(self, key):
+                    return "{" + key + "}"
+
+            system_prompt = campaign.agent_prompt.format_map(
+                SafeMap(
+                    business_name=business_name,
+                    first_name=first_name,
+                    full_name=lead.full_name or "ji",
+                    phone=lead.phone or "",
+                    campaign_name=campaign.name or "",
+                )
+            )
+        else:
+            system_prompt = build_system_prompt(lead, db)
+    else:
+        system_prompt = build_system_prompt(lead, db)
+
+    return await _dispatch(provider, cfg, lead, system_prompt, db)
 
 
 # ── Provider dispatch ─────────────────────────────────────────────────────────
@@ -501,7 +334,7 @@ async def _bland_call(cfg: CallingConfig, lead: Lead, prompt: str) -> str:
         "voice_id": 0,
         "reduce_latency": False,
         "request_data": {
-            "patient_name": lead.full_name or "",
+            "lead_name": lead.full_name or "",
             "inquiry_type": lead.inquiry_type or "",
         },
     }
@@ -527,9 +360,8 @@ async def _retell_call(cfg: CallingConfig, lead: Lead, prompt: str) -> str:
         "agent_id": cfg.agent_id,
         "to_number": lead.phone,
         "retell_llm_dynamic_variables": {
-            "patient_name": lead.full_name or "Patient",
+            "lead_name": lead.full_name or "Lead",
             "inquiry_type": lead.inquiry_type or "",
-            "consultation_type": lead.consultation_type or "online",
             "system_prompt": prompt,
         },
     }
@@ -564,7 +396,6 @@ async def _custom_call(cfg: CallingConfig, lead: Lead, prompt: str) -> str:
         "system_prompt": prompt,
         "agent_id": cfg.agent_id or "",
         "inquiry_type": lead.inquiry_type or "",
-        "consultation_type": lead.consultation_type or "online",
     }
 
     async with async_client(timeout=30) as client:

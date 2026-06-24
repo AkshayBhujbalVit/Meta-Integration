@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from core.config import ALLOWED_ORIGINS
 from routers import auth, leads, kb, calling, appointments, sms, settings
-from routers import whatsapp, analytics, usage
+from routers import whatsapp, analytics, usage, clients, campaigns, meta_webhook, webhooks, dev, integrations, oauth
 
 
 @asynccontextmanager
@@ -20,8 +20,8 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="Dr. Sonal Gupta AI Calling Platform — LiveKit Edition",
-    version="2.1.0",
+    title="Vidushi Infotech — AI Calling Platform",
+    version="1.0.0",
     docs_url=None,
     redoc_url=None,
     lifespan=lifespan,
@@ -46,6 +46,12 @@ async def add_security_headers(request: Request, call_next):
     response.headers["X-XSS-Protection"] = "1; mode=block"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
     response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
+    # HSTS — tell browsers to always use HTTPS for 1 year (production only)
+    response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    # CSP — API-only backend: no scripts/frames allowed
+    response.headers["Content-Security-Policy"] = "default-src 'none'; frame-ancestors 'none'"
+    # Hide server fingerprint
+    response.headers["Server"] = "vidushi"
     return response
 
 
@@ -59,11 +65,18 @@ app.include_router(settings.router)
 app.include_router(whatsapp.router)
 app.include_router(analytics.router)
 app.include_router(usage.router)
+app.include_router(clients.router)
+app.include_router(campaigns.router)
+app.include_router(meta_webhook.router)
+app.include_router(webhooks.router)
+app.include_router(integrations.router)
+app.include_router(oauth.router)
+app.include_router(dev.router)
 
 
 @app.get("/")
 def root():
-    return {"status": "ok", "app": "Dr. Sonal Gupta AI Calling Platform", "version": "2.1.0"}
+    return {"status": "ok", "app": "Vidushi Infotech AI Calling Platform", "version": "1.0.0"}
 
 
 @app.get("/health")

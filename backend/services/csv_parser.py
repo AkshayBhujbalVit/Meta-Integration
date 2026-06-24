@@ -154,10 +154,9 @@ def parse_and_import_csv(file_path: str, file_name: str, db: Session) -> dict:
                     merged += 1
                 continue
 
-            # ── Consultation type: Agra = in-clinic, all others = online ─────
             city_raw = (data.get("city") or "").strip()
             city_val = city_raw.lower()
-            consultation_type = "in_clinic" if city_val == "agra" else "online"
+            consultation_type = data.get("consultation_type") or "online"
 
             from routers.leads import normalise_city
 

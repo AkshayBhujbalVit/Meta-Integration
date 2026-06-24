@@ -25,6 +25,8 @@ from core.dependencies import get_current_admin
 from models.models.lead import Lead, LeadStatus
 from models.models.call import CallLog
 from models.models.appointment import Appointment
+from models.models.client import Client
+from models.models.campaign import Campaign, CampaignStatus
 
 logger = logging.getLogger("analytics")
 
@@ -391,3 +393,136 @@ def city_breakdown(db: Session = Depends(get_db), _=Depends(get_current_admin)):
         .all()
     )
     return [{"city": r.city, "count": r.count} for r in rows]
+
+
+# ── Multi-tenant dashboard overview ──────────────────────────────────────────
+
+@router.get("/dashboard-overview")
+def dashboard_overview(db: Session = Depends(get_db), _=Depends(get_current_admin)):
+    """KPIs + per-client breakdown for the multi-tenant dashboard."""
+    today = datetime.utcnow().date()
+    today_start = datetime(today.year, today.month, today.day)
+
+    total_clients = db.query(Client).filter(Client.is_active == True).count()
+    active_campaigns = db.query(Campaign).filter(Campaign.status == CampaignStatus.active.value).count()
+    total_leads = db.query(Lead).filter(Lead.is_duplicate == False).count()
+    new_leads_today = db.query(Lead).filter(Lead.created_at >= today_start, Lead.is_duplicate == False).count()
+    calls_today = db.query(CallLog).filter(CallLog.created_at >= today_start).count()
+    booked_today = db.query(Lead).filter(
+        Lead.status == LeadStatus.appointment_booked,
+        Lead.updated_at >= today_start,
+    ).count()
+    total_booked = db.query(Lead).filter(Lead.status == LeadStatus.appointment_booked).count()
+    total_called = db.query(Lead).filter(Lead.call_count > 0, Lead.is_duplicate == False).count()
+
+    # Platform breakdown — leads + called + booked per source
+    platforms_raw = (
+        db.query(Lead.source_platform, func.count(Lead.id).label("total"))
+        .filter(Lead.is_duplicate == False, Lead.source_platform.isnot(None))
+        .group_by(Lead.source_platform)
+        .all()
+    )
+    by_platform = []
+    for row in platforms_raw:
+        p = row.source_platform
+        called_p = db.query(Lead).filter(
+            Lead.source_platform == p, Lead.call_count > 0, Lead.is_duplicate == False
+        ).count()
+        booked_p = db.query(Lead).filter(
+            Lead.source_platform == p, Lead.status == LeadStatus.appointment_booked
+        ).count()
+        by_platform.append({
+            "platform": p,
+            "total": row.total,
+            "called": called_p,
+            "booked": booked_p,
+            "conv_pct": round(booked_p / row.total * 100, 1) if row.total else 0,
+        })
+    by_platform.sort(key=lambda x: x["total"], reverse=True)
+
+    # Active campaigns with stats
+    active_campaign_rows = (
+        db.query(Campaign)
+        .filter(Campaign.status == CampaignStatus.active.value, Campaign.is_active == True)
+        .order_by(Campaign.id.desc())
+        .limit(10)
+        .all()
+    )
+    client_map_full = {c.id: c for c in db.query(Client).all()}
+    active_campaigns_list = []
+    for camp in active_campaign_rows:
+        c_leads = db.query(Lead).filter(Lead.campaign_id == camp.id, Lead.is_duplicate == False).count()
+        c_called = db.query(Lead).filter(Lead.campaign_id == camp.id, Lead.call_count > 0).count()
+        c_booked = db.query(Lead).filter(
+            Lead.campaign_id == camp.id, Lead.status == LeadStatus.appointment_booked
+        ).count()
+        client_obj = client_map_full.get(camp.client_id)
+        active_campaigns_list.append({
+            "id": camp.id,
+            "name": camp.name,
+            "client_name": client_obj.name if client_obj else "—",
+            "caller_phone": camp.caller_phone_number,
+            "total_leads": c_leads,
+            "called": c_called,
+            "booked": c_booked,
+            "conv_pct": round(c_booked / c_leads * 100, 1) if c_leads else 0,
+        })
+
+    # Per-client breakdown
+    client_rows = db.query(Client).filter(Client.is_active == True).all()
+    client_stats = []
+    for client in client_rows:
+        c_leads = db.query(Lead).filter(Lead.client_id == client.id, Lead.is_duplicate == False).count()
+        c_booked = db.query(Lead).filter(
+            Lead.client_id == client.id, Lead.status == LeadStatus.appointment_booked,
+        ).count()
+        c_active = db.query(Campaign).filter(
+            Campaign.client_id == client.id, Campaign.status == CampaignStatus.active.value
+        ).count()
+        client_stats.append({
+            "id": client.id,
+            "name": client.name,
+            "business_type": client.business_type,
+            "total_leads": c_leads,
+            "booked": c_booked,
+            "active_campaigns": c_active,
+        })
+    client_stats.sort(key=lambda x: x["total_leads"], reverse=True)
+
+    # Recent leads feed
+    recent_leads = (
+        db.query(Lead)
+        .filter(Lead.is_duplicate == False)
+        .order_by(Lead.created_at.desc())
+        .limit(15)
+        .all()
+    )
+    campaign_map = {c.id: c.name for c in db.query(Campaign).all()}
+    recent = [
+        {
+            "id": l.id,
+            "full_name": l.full_name,
+            "phone": l.phone,
+            "status": l.status,
+            "source_platform": l.source_platform or "manual",
+            "client_name": client_map_full[l.client_id].name if l.client_id and l.client_id in client_map_full else "—",
+            "campaign_name": campaign_map.get(l.campaign_id, "—") if l.campaign_id else "—",
+            "created_at": l.created_at.isoformat() if l.created_at else None,
+        }
+        for l in recent_leads
+    ]
+
+    return {
+        "total_clients": total_clients,
+        "active_campaigns": active_campaigns,
+        "total_leads": total_leads,
+        "new_leads_today": new_leads_today,
+        "calls_today": calls_today,
+        "booked_today": booked_today,
+        "total_booked": total_booked,
+        "total_called": total_called,
+        "by_platform": by_platform,
+        "active_campaigns_list": active_campaigns_list,
+        "clients": client_stats[:10],
+        "recent_leads": recent,
+    }

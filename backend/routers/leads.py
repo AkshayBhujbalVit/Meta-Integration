@@ -12,6 +12,8 @@ from core.dependencies import get_current_admin
 from models.models.admin import Admin
 from models.models.appointment import Appointment
 from models.models.call import CallLog
+from models.models.campaign import Campaign
+from models.models.client import Client
 from models.models.lead import Lead, LeadStatus, LeadUpload
 from models.models.settings import CallingConfig
 from models.models.sms import SMSLog
@@ -197,28 +199,52 @@ def delete_upload_batch(
 
 @router.get("/")
 def get_leads(
+    # Universal filters
+    client_id: int = Query(None),
+    campaign_id: int = Query(None),
+    source_platform: str = Query(None),
+    status: str = Query(None),
+    date_from: str = Query(None),   # ISO date string e.g. 2024-01-01
+    date_to: str = Query(None),
+    search: str = Query(None),
+    # Legacy filters kept for backward-compat
     city: str = Query(None),
     inquiry_type: str = Query(None),
     consultation_type: str = Query(None),
-    status: str = Query(None),
     platform: str = Query(None),
-    search: str = Query(None),
     skip: int = Query(0),
-    offset: int = Query(0),  # alias — frontend may send offset instead of skip
+    offset: int = Query(0),
     limit: int = Query(50),
     admin: Admin = Depends(get_current_admin),
     db: Session = Depends(get_db),
 ):
+    from datetime import datetime
     q = db.query(Lead).filter(Lead.is_duplicate == False)
 
+    if client_id is not None:
+        q = q.filter(Lead.client_id == client_id)
+    if campaign_id is not None:
+        q = q.filter(Lead.campaign_id == campaign_id)
+    if source_platform:
+        q = q.filter(Lead.source_platform == source_platform)
+    if status:
+        q = q.filter(Lead.status == status)
+    if date_from:
+        try:
+            q = q.filter(Lead.created_at >= datetime.fromisoformat(date_from))
+        except ValueError:
+            pass
+    if date_to:
+        try:
+            q = q.filter(Lead.created_at <= datetime.fromisoformat(date_to + "T23:59:59"))
+        except ValueError:
+            pass
     if city:
         q = q.filter(Lead.city.ilike(f"%{city}%"))
     if inquiry_type:
         q = q.filter(Lead.inquiry_type == inquiry_type)
     if consultation_type:
         q = q.filter(Lead.consultation_type == consultation_type)
-    if status:
-        q = q.filter(Lead.status == status)
     if platform:
         q = q.filter(Lead.platform == platform)
     if search:
@@ -231,12 +257,18 @@ def get_leads(
         )
 
     total = q.count()
-    effective_skip = skip or offset  # accept either param name
+    effective_skip = skip or offset
     leads = q.order_by(Lead.created_at.desc()).offset(effective_skip).limit(limit).all()
+
+    # Build client/campaign name lookup for serialization
+    client_ids = {l.client_id for l in leads if l.client_id}
+    campaign_ids = {l.campaign_id for l in leads if l.campaign_id}
+    clients_map = {c.id: c.name for c in db.query(Client).filter(Client.id.in_(client_ids)).all()} if client_ids else {}
+    campaigns_map = {c.id: c.name for c in db.query(Campaign).filter(Campaign.id.in_(campaign_ids)).all()} if campaign_ids else {}
 
     return {
         "total": total,
-        "leads": [_serialize(lead) for lead in leads],
+        "leads": [_serialize(lead, clients_map, campaigns_map) for lead in leads],
     }
 
 
@@ -267,6 +299,9 @@ class LeadCreate(PydanticModel):
     problem_description: str | None = None
     consultation_type: str = "online"
     email: str | None = None
+    client_id: int | None = None
+    campaign_id: int | None = None
+    source_platform: str | None = "manual"
 
 
 @router.post("/")
@@ -293,6 +328,9 @@ async def create_lead(
         problem_description=payload.problem_description,
         consultation_type=payload.consultation_type,
         email=payload.email,
+        client_id=payload.client_id,
+        campaign_id=payload.campaign_id,
+        source_platform=payload.source_platform or "manual",
         status=LeadStatus.new,
     )
     db.add(lead)
@@ -393,17 +431,19 @@ def get_filter_options(
     admin: Admin = Depends(get_current_admin),
     db: Session = Depends(get_db),
 ):
-    cities = db.query(Lead.city).filter(Lead.city is not None).distinct().all()
-    inquiry_types = (
-        db.query(Lead.inquiry_type).filter(Lead.inquiry_type is not None).distinct().all()
-    )
-    platforms = db.query(Lead.platform).filter(Lead.platform is not None).distinct().all()
+    cities = db.query(Lead.city).filter(Lead.city.isnot(None)).distinct().all()
+    inquiry_types = db.query(Lead.inquiry_type).filter(Lead.inquiry_type.isnot(None)).distinct().all()
+    source_platforms = db.query(Lead.source_platform).filter(Lead.source_platform.isnot(None)).distinct().all()
+    clients = db.query(Client.id, Client.name).filter(Client.is_active == True).order_by(Client.name).all()
+    campaigns = db.query(Campaign.id, Campaign.client_id, Campaign.name).filter(Campaign.is_active == True).order_by(Campaign.name).all()
 
     return {
         "cities": sorted([c[0] for c in cities if c[0]]),
         "inquiry_types": sorted([i[0] for i in inquiry_types if i[0]]),
-        "platforms": sorted([p[0] for p in platforms if p[0]]),
+        "source_platforms": sorted([p[0] for p in source_platforms if p[0]]),
         "statuses": [s.value for s in LeadStatus],
+        "clients": [{"id": c.id, "name": c.name} for c in clients],
+        "campaigns": [{"id": c.id, "client_id": c.client_id, "name": c.name} for c in campaigns],
     }
 
 
@@ -426,13 +466,20 @@ def reset_stuck_calls(
 # ── Serializer ────────────────────────────────────────────────────────────────
 
 
-def _serialize(lead: Lead) -> dict:
+def _serialize(lead: Lead, clients_map: dict = {}, campaigns_map: dict = {}) -> dict:
     return {
         "id": lead.id,
         "full_name": lead.full_name,
         "phone": lead.phone,
         "email": lead.email,
         "city": lead.city,
+        # Multi-tenant
+        "client_id": lead.client_id,
+        "client_name": clients_map.get(lead.client_id) if lead.client_id else None,
+        "campaign_id": lead.campaign_id,
+        "campaign_name": campaigns_map.get(lead.campaign_id) if lead.campaign_id else lead.campaign_name,
+        "source_platform": lead.source_platform,
+        # Legacy
         "platform": lead.platform,
         "inquiry_type": lead.inquiry_type,
         "problem_description": lead.problem_description,
@@ -446,7 +493,7 @@ def _serialize(lead: Lead) -> dict:
         "last_called_at": lead.last_called_at,
         "notes": lead.notes,
         "fb_lead_id": lead.fb_lead_id,
-        "campaign_name": lead.campaign_name,
+        "ad_name": lead.ad_name,
         "fb_created_time": lead.fb_created_time,
         "created_at": lead.created_at,
     }

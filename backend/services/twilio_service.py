@@ -19,65 +19,65 @@ TEMPLATES = {
     "confirmation": {
         "hindi": (
             "🙏 नमस्ते {name} जी!\n\n"
-            "आपकी Dr. Sonal Gupta के साथ consultation confirm हो गई है।\n\n"
+            "आपकी our team के साथ consultation confirm हो गई है।\n\n"
             "📅 तारीख: {date}\n"
             "🕐 समय: {time}\n"
             "💻 प्रकार: {type}\n\n"
             "{extra}"
             "किसी भी सवाल के लिए हमें इसी नंबर पर WhatsApp करें।\n\n"
-            "— Dr. Sonal Gupta Clinic"
+            "— Our Team"
         ),
         "marathi": (
             "🙏 नमस्ते {name} जी!\n\n"
-            "Dr. Sonal Gupta यांच्याशी तुमची consultation confirm झाली आहे।\n\n"
+            "our team यांच्याशी तुमची consultation confirm झाली आहे।\n\n"
             "📅 तारीख: {date}\n"
             "🕐 वेळ: {time}\n"
             "💻 प्रकार: {type}\n\n"
             "{extra}"
             "कोणत्याही प्रश्नासाठी या नंबरवर WhatsApp करा।\n\n"
-            "— Dr. Sonal Gupta Clinic"
+            "— Our Team"
         ),
         "english": (
             "🙏 Hello {name}!\n\n"
-            "Your consultation with Dr. Sonal Gupta is confirmed.\n\n"
+            "Your consultation with our team is confirmed.\n\n"
             "📅 Date: {date}\n"
             "🕐 Time: {time}\n"
             "💻 Type: {type}\n\n"
             "{extra}"
             "WhatsApp us on this number for any queries.\n\n"
-            "— Dr. Sonal Gupta Clinic"
+            "— Our Team"
         ),
     },
     "reminder": {
         "hindi": (
             "🔔 नमस्ते {name} जी!\n\n"
-            "याद दिलाना चाहते हैं — Dr. Sonal Gupta के साथ आपकी consultation कल है।\n\n"
+            "याद दिलाना चाहते हैं — our team के साथ आपकी consultation कल है।\n\n"
             "📅 तारीख: {date}\n"
             "🕐 समय: {time}\n"
             "💻 प्रकार: {type}\n\n"
             "{extra}"
             "कोई बदलाव हो तो हमें बताएं।\n\n"
-            "— Dr. Sonal Gupta Clinic"
+            "— Our Team"
         ),
         "marathi": (
             "🔔 नमस्ते {name} जी!\n\n"
-            "आठवण: Dr. Sonal Gupta यांच्याशी उद्या consultation आहे।\n\n"
+            "आठवण: our team यांच्याशी उद्या consultation आहे।\n\n"
             "📅 तारीख: {date}\n"
             "🕐 वेळ: {time}\n"
             "💻 प्रकार: {type}\n\n"
             "{extra}"
             "काही बदल असल्यास आम्हाला सांगा।\n\n"
-            "— Dr. Sonal Gupta Clinic"
+            "— Our Team"
         ),
         "english": (
             "🔔 Hello {name}!\n\n"
-            "Reminder: Your consultation with Dr. Sonal Gupta is tomorrow.\n\n"
+            "Reminder: Your consultation with our team is tomorrow.\n\n"
             "📅 Date: {date}\n"
             "🕐 Time: {time}\n"
             "💻 Type: {type}\n\n"
             "{extra}"
             "Let us know if you need to reschedule.\n\n"
-            "— Dr. Sonal Gupta Clinic"
+            "— Our Team"
         ),
     },
     "cancellation": {
@@ -85,39 +85,39 @@ TEMPLATES = {
             "नमस्ते {name} जी।\n\n"
             "आपकी {date} की consultation cancel हो गई है।\n\n"
             "नई appointment book करने के लिए हमें इसी नंबर पर WhatsApp करें।\n\n"
-            "— Dr. Sonal Gupta Clinic"
+            "— Our Team"
         ),
         "marathi": (
             "नमस्ते {name} जी।\n\n"
             "तुमची {date} ची consultation cancel झाली आहे।\n\n"
             "नवीन appointment बुक करण्यासाठी या नंबरवर WhatsApp करा।\n\n"
-            "— Dr. Sonal Gupta Clinic"
+            "— Our Team"
         ),
         "english": (
             "Hello {name}.\n\n"
             "Your consultation on {date} has been cancelled.\n\n"
             "Please WhatsApp us on this number to reschedule.\n\n"
-            "— Dr. Sonal Gupta Clinic"
+            "— Our Team"
         ),
     },
     "interested_followup": {
         "hindi": (
             "🙏 नमस्ते {name} जी!\n\n"
-            "Dr. Sonal Gupta Clinic से बात करके अच्छा लगा।\n\n"
+            "Our Team से बात करके अच्छा लगा।\n\n"
             "आप consultation book करने के लिए तैयार हों तो हमें इसी नंबर पर WhatsApp करें — हम आपकी appointment fix कर देंगे।\n\n"
-            "— Dr. Sonal Gupta Clinic"
+            "— Our Team"
         ),
         "marathi": (
             "🙏 नमस्ते {name} जी!\n\n"
-            "Dr. Sonal Gupta Clinic शी बोलणे चांगले वाटले।\n\n"
+            "Our Team शी बोलणे चांगले वाटले।\n\n"
             "Consultation बुक करायची असेल तर या नंबरवर WhatsApp करा।\n\n"
-            "— Dr. Sonal Gupta Clinic"
+            "— Our Team"
         ),
         "english": (
             "🙏 Hello {name}!\n\n"
-            "Thank you for speaking with Dr. Sonal Gupta Clinic.\n\n"
+            "Thank you for speaking with Our Team.\n\n"
             "Whenever you are ready to book a consultation, just WhatsApp us on this number.\n\n"
-            "— Dr. Sonal Gupta Clinic"
+            "— Our Team"
         ),
     },
 }

@@ -203,6 +203,10 @@ class CallingCredentialsUpdate(BaseModel):
     twilio_auth_token: str | None = None
     twilio_from_number: str | None = None
     inbound_phone_number: str | None = None
+    # Twilio's own LiveKit trunk (built by hand, pasted in)
+    twilio_outbound_trunk_id: str | None = None
+    twilio_inbound_trunk_id: str | None = None
+    twilio_dispatch_rule_id: str | None = None
     # VoBiz SIP trunk
     vobiz_auth_id: str | None = None
     vobiz_auth_token: str | None = None
@@ -210,6 +214,8 @@ class CallingCredentialsUpdate(BaseModel):
     vobiz_sip_domain: str | None = None
     vobiz_sip_username: str | None = None
     vobiz_sip_password: str | None = None
+    vobiz_trunk_id: str | None = None
+    livekit_sip_uri: str | None = None
 
 
 @router.get("/calling/credentials")
@@ -233,6 +239,11 @@ def get_calling_credentials(db: Session = Depends(get_db), _=Depends(get_current
         "vobiz_sip_domain": c.vobiz_sip_domain or "",
         "vobiz_sip_username_set": bool(c.vobiz_sip_username),
         "vobiz_sip_password_set": bool(c.vobiz_sip_password),
+        "vobiz_trunk_id": c.vobiz_trunk_id or "",
+        "livekit_sip_uri": c.livekit_sip_uri or "",
+        "phone_provider": c.phone_provider or "",
+        "twilio_outbound_trunk_id": c.twilio_outbound_trunk_id or "",
+        "twilio_inbound_trunk_id": c.twilio_inbound_trunk_id or "",
     }
 
 
@@ -262,6 +273,12 @@ def update_calling_credentials(
         c.twilio_from_number = body.twilio_from_number
     if body.inbound_phone_number is not None:
         c.inbound_phone_number = body.inbound_phone_number
+    if body.twilio_outbound_trunk_id is not None:
+        c.twilio_outbound_trunk_id = body.twilio_outbound_trunk_id
+    if body.twilio_inbound_trunk_id is not None:
+        c.twilio_inbound_trunk_id = body.twilio_inbound_trunk_id
+    if body.twilio_dispatch_rule_id is not None:
+        c.twilio_dispatch_rule_id = body.twilio_dispatch_rule_id
 
     # VoBiz credentials
     if body.vobiz_auth_id:
@@ -276,9 +293,36 @@ def update_calling_credentials(
         c.vobiz_sip_username = encrypt(body.vobiz_sip_username)
     if body.vobiz_sip_password:
         c.vobiz_sip_password = encrypt(body.vobiz_sip_password)
+    if body.vobiz_trunk_id is not None:
+        c.vobiz_trunk_id = body.vobiz_trunk_id
+    if body.livekit_sip_uri is not None:
+        c.livekit_sip_uri = body.livekit_sip_uri
 
     db.commit()
     return {"message": "Calling credentials updated and encrypted"}
+
+
+class ActivateProviderRequest(BaseModel):
+    provider: str  # "vobiz" / "twilio" / "" to deactivate
+
+
+@router.post("/calling/activate-provider")
+async def activate_provider_endpoint(
+    body: ActivateProviderRequest,
+    db: Session = Depends(get_db),
+    _=Depends(get_current_admin),
+):
+    """
+    Switches which provider's LiveKit SIP trunk is active for calling.
+    Unlike PATCH /calling/credentials (which only stores values), this touches
+    real infrastructure — see services/sip_provisioning_service.py.
+    """
+    from services.sip_provisioning_service import activate_provider
+
+    try:
+        return await activate_provider(db, body.provider)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
 
 # ── Calendar config ───────────────────────────────────────────────────────────

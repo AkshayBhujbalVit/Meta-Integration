@@ -5,14 +5,15 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   getClinicSettings, updateClinicSettings,
   getCallingConfig, updateCallingConfig,
-  getCallingCredentials, updateCallingCredentials,
+  getCallingCredentials, updateCallingCredentials, activateProvider,
   getMessagingConfig, updateMessagingConfig,
   getCalendarConfig, updateCalendarConfig, testCalendarConnection, testCalDavConnection,
 } from "@/lib/api";
 import { toast } from "sonner";
-import { Loader2, Save, Building2, Phone, MessageSquare, Smartphone, CalendarDays, CheckCircle2, XCircle, FlaskConical, KeyRound } from "lucide-react";
+import { Loader2, Save, Building2, Phone, MessageSquare, Smartphone, CalendarDays, CheckCircle2, XCircle, FlaskConical, KeyRound, Database, Trash2 } from "lucide-react";
+import { api } from "@/lib/api";
 
-type Tab = "clinic" | "calling" | "sms" | "whatsapp" | "calendar";
+type Tab = "clinic" | "calling" | "sms" | "whatsapp" | "calendar" | "developer";
 
 
 export default function SettingsPage() {
@@ -22,17 +23,18 @@ export default function SettingsPage() {
     <div className="p-6 space-y-5">
       <div>
         <h1 className="text-xl font-bold text-gray-900">Settings</h1>
-        <p className="text-sm text-gray-500">Configure clinic, phone number, messaging, and calendar</p>
+        <p className="text-sm text-gray-500">Configure company info, calling, SMS, WhatsApp, and calendar</p>
       </div>
 
       {/* Tab switcher */}
       <div className="flex gap-1 bg-gray-100 p-1 rounded-xl w-fit">
         {([
-          ["clinic",   Building2,    "Clinic"],
+          ["clinic",   Building2,    "Company"],
           ["calling",  Phone,        "Calling"],
           ["sms",      MessageSquare, "SMS"],
           ["whatsapp", Smartphone,   "WhatsApp"],
-          ["calendar", CalendarDays, "Calendar"],
+          ["calendar",   CalendarDays, "Calendar"],
+          ["developer",  FlaskConical, "Developer"],
         ] as [Tab, React.ComponentType<{ className?: string }>, string][]).map(([key, Icon, label]) => (
           <button key={key} onClick={() => setTab(key)}
             className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition ${tab === key ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}>
@@ -41,11 +43,97 @@ export default function SettingsPage() {
         ))}
       </div>
 
-      {tab === "clinic"    && <ClinicTab />}
-      {tab === "calling"   && <CallingTab />}
-      {tab === "sms"       && <SMSTab />}
-      {tab === "whatsapp"  && <WhatsAppTab />}
-      {tab === "calendar"  && <CalendarTab />}
+      {tab === "clinic"     && <ClinicTab />}
+      {tab === "calling"    && <CallingTab />}
+      {tab === "sms"        && <SMSTab />}
+      {tab === "whatsapp"   && <WhatsAppTab />}
+      {tab === "calendar"   && <CalendarTab />}
+      {tab === "developer"  && <DeveloperTab />}
+    </div>
+  );
+}
+
+// ── Developer Tab ─────────────────────────────────────────────────────────────
+
+function DeveloperTab() {
+  const [seedLoading, setSeedLoading]   = useState(false);
+  const [clearLoading, setClearLoading] = useState(false);
+  const [result, setResult]             = useState<string | null>(null);
+
+  const runSeed = async () => {
+    setSeedLoading(true);
+    setResult(null);
+    try {
+      const res = await api.post("/dev/seed-test-data");
+      const d = res.data;
+      setResult(`✅ Inserted ${d.leads_created} leads, ${d.call_logs_created} call logs, appointment: ${d.appointment_created}. Skipped: ${d.leads_skipped}.`);
+      toast.success(`Demo data loaded — ${d.leads_created} leads inserted`);
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { detail?: string } } };
+      const msg = err.response?.data?.detail || "Failed to load demo data";
+      setResult(`❌ ${msg}`);
+      toast.error(msg);
+    } finally {
+      setSeedLoading(false);
+    }
+  };
+
+  const clearSeed = async () => {
+    setClearLoading(true);
+    setResult(null);
+    try {
+      const res = await api.delete("/dev/seed-test-data");
+      setResult(`🗑️ Removed ${res.data.removed_leads} demo leads and their related data.`);
+      toast.success("Demo data cleared");
+    } catch {
+      toast.error("Failed to clear demo data");
+    } finally {
+      setClearLoading(false);
+    }
+  };
+
+  return (
+    <div className="space-y-4 max-w-xl">
+      <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-sm text-amber-700">
+        <p className="font-bold mb-1">Developer Tools</p>
+        <p className="text-xs">Use these to populate the app with realistic demo data for testing. All demo records are clearly tagged and can be removed at any time.</p>
+      </div>
+
+      <div className="bg-white border border-gray-100 rounded-xl p-5 space-y-4">
+        <div>
+          <h3 className="text-sm font-bold text-gray-900 flex items-center gap-2">
+            <Database className="w-4 h-4 text-blue-500" /> Demo Data
+          </h3>
+          <p className="text-xs text-gray-400 mt-1">
+            Inserts 2 test leads per platform (Meta, HubSpot, Google, Klaviyo), sample call logs, and 1 appointment.
+          </p>
+        </div>
+
+        <div className="flex gap-3">
+          <button
+            onClick={runSeed}
+            disabled={seedLoading || clearLoading}
+            className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-bold rounded-xl transition"
+          >
+            {seedLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Database className="w-4 h-4" />}
+            {seedLoading ? "Loading…" : "Load Demo Data"}
+          </button>
+          <button
+            onClick={clearSeed}
+            disabled={seedLoading || clearLoading}
+            className="flex-1 flex items-center justify-center gap-2 py-2.5 border border-red-200 bg-red-50 hover:bg-red-100 disabled:opacity-50 text-red-600 text-sm font-semibold rounded-xl transition"
+          >
+            {clearLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+            {clearLoading ? "Clearing…" : "Clear Demo Data"}
+          </button>
+        </div>
+
+        {result && (
+          <div className="text-xs text-gray-600 bg-gray-50 rounded-lg px-4 py-3 border border-gray-100">
+            {result}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -67,11 +155,11 @@ function ClinicTab() {
 
   const mut = useMutation({
     mutationFn: () => updateClinicSettings(form),
-    onSuccess: () => { toast.success("Clinic settings saved"); setDirty(false); qc.invalidateQueries({ queryKey: ["settings-clinic"] }); },
+    onSuccess: () => { toast.success("Company settings saved"); setDirty(false); qc.invalidateQueries({ queryKey: ["settings-clinic"] }); },
     onError: () => toast.error("Failed to save"),
   });
 
-  if (isLoading) return <div className="flex items-center justify-center h-32"><Loader2 className="w-5 h-5 animate-spin text-violet-500" /></div>;
+  if (isLoading) return <div className="flex items-center justify-center h-32"><Loader2 className="w-5 h-5 animate-spin text-blue-500" /></div>;
 
   const val = (k: string) => form[k] ?? cfg[k] ?? "";
 
@@ -79,38 +167,133 @@ function ClinicTab() {
     <div className="bg-white rounded-xl border border-gray-100 p-6 max-w-2xl space-y-5">
       <div className="grid grid-cols-2 gap-4">
         {[
-          ["clinic_name", "Clinic Name"],
-          ["doctor_name", "Doctor Name"],
-          ["phone", "Clinic Phone"],
-          ["email", "Clinic Email"],
+          ["clinic_name", "Company Name"],
+          ["phone", "Company Phone"],
+          ["email", "Company Email"],
           ["city", "City"],
           ["website", "Website"],
         ].map(([key, label]) => (
           <div key={key}>
             <label className="block text-xs font-medium text-gray-600 mb-1.5">{label}</label>
             <input value={val(key)} onChange={(e) => update(key, e.target.value)}
-              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500" />
+              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
           </div>
         ))}
       </div>
       <div>
         <label className="block text-xs font-medium text-gray-600 mb-1.5">Address</label>
         <textarea value={val("address")} onChange={(e) => update("address", e.target.value)} rows={2}
-          className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500 resize-none" />
+          className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" />
       </div>
       <div>
-        <label className="block text-xs font-medium text-gray-600 mb-1.5">Timings</label>
+        <label className="block text-xs font-medium text-gray-600 mb-1.5">Business Hours</label>
         <input value={val("timings")} onChange={(e) => update("timings", e.target.value)}
-          placeholder="Mon–Sat: 10am–1pm, 5pm–8pm"
-          className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500" />
+          placeholder="Mon–Sat: 9am–6pm"
+          className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
       </div>
       <button onClick={() => mut.mutate()} disabled={!dirty || mut.isPending}
-        className="flex items-center gap-2 px-5 py-2.5 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition">
+        className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition">
         {mut.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} Save Changes
       </button>
     </div>
   );
 }
+
+// ── Phone Provider Card ───────────────────────────────────────────────────────
+
+// ── LiveKit Project Credentials Card ──────────────────────────────────────────
+// Shared by every phone provider — set once here, no .env editing needed.
+
+function LiveKitCredentialsCard() {
+  const qc = useQueryClient();
+  const { data, isLoading } = useQuery({ queryKey: ["settings-calling-credentials"], queryFn: getCallingCredentials });
+  const [form, setForm] = useState<Record<string, string>>({});
+  const [dirty, setDirty] = useState(false);
+
+  const cfg = data?.data ?? {};
+  const set = (k: string, v: string) => { setForm((f) => ({ ...f, [k]: v })); setDirty(true); };
+  const val = (k: string, isSet = false) => {
+    if (form[k] !== undefined) return form[k] as string;
+    return isSet ? MASKED : ((cfg[k] ?? "") as string);
+  };
+  const clearMask = (k: string) => { if (form[k] === undefined) set(k, ""); };
+
+  const mut = useMutation({
+    mutationFn: () => updateCallingCredentials(form),
+    onSuccess: () => {
+      toast.success("LiveKit credentials saved & encrypted");
+      setDirty(false);
+      setForm({});
+      qc.invalidateQueries({ queryKey: ["settings-calling-credentials"] });
+    },
+    onError: () => toast.error("Failed to save"),
+  });
+
+  if (isLoading) return null;
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-100 p-6 space-y-4">
+      <div className="pb-2 border-b border-gray-100">
+        <h3 className="font-semibold text-gray-800 text-sm">LiveKit Project</h3>
+        <p className="text-xs text-gray-400 mt-0.5">Used by every phone provider below — no .env editing needed</p>
+      </div>
+
+      <div className="bg-blue-50 border border-blue-100 rounded-lg px-4 py-3 text-xs text-blue-700 space-y-1">
+        <p className="font-semibold">From the LiveKit Cloud Dashboard:</p>
+        <ol className="list-decimal list-inside space-y-0.5 text-blue-600">
+          <li>Settings → General → copy Project URL</li>
+          <li>Settings → API Keys → create/copy API Key and Secret</li>
+          <li>Settings → Project → copy SIP URI (needed for inbound routing)</li>
+        </ol>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className="block text-xs font-medium text-gray-600 mb-1.5">
+            LiveKit URL {cfg.livekit_url && <span className="text-green-500 ml-1">✓ saved</span>}
+          </label>
+          <input value={val("livekit_url")} onChange={(e) => set("livekit_url", e.target.value)}
+            placeholder="wss://your-project.livekit.cloud"
+            className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono" />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-600 mb-1.5">
+            SIP URI {cfg.livekit_sip_uri && <span className="text-green-500 ml-1">✓ saved</span>}
+          </label>
+          <input value={val("livekit_sip_uri")} onChange={(e) => set("livekit_sip_uri", e.target.value)}
+            placeholder="your-project.sip.livekit.cloud"
+            className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono" />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-600 mb-1.5">
+            API Key {cfg.livekit_api_key_set && <span className="text-green-500 ml-1">✓ saved</span>}
+          </label>
+          <input type="password" value={val("livekit_api_key", cfg.livekit_api_key_set)}
+            onFocus={() => clearMask("livekit_api_key")}
+            onChange={(e) => set("livekit_api_key", e.target.value)}
+            placeholder={cfg.livekit_api_key_set ? "Type new value to replace" : "APIxxxxxxxxxxxx"}
+            className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono" />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-600 mb-1.5">
+            API Secret {cfg.livekit_api_secret_set && <span className="text-green-500 ml-1">✓ saved</span>}
+          </label>
+          <input type="password" value={val("livekit_api_secret", cfg.livekit_api_secret_set)}
+            onFocus={() => clearMask("livekit_api_secret")}
+            onChange={(e) => set("livekit_api_secret", e.target.value)}
+            placeholder={cfg.livekit_api_secret_set ? "Type new value to replace" : "Enter API Secret"}
+            className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono" />
+        </div>
+      </div>
+
+      <button onClick={() => mut.mutate()} disabled={!dirty || mut.isPending}
+        className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition">
+        {mut.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} Save & Encrypt
+      </button>
+    </div>
+  );
+}
+
 
 // ── Phone Provider Card ───────────────────────────────────────────────────────
 
@@ -122,6 +305,7 @@ function PhoneProviderCard() {
   const qc = useQueryClient();
   const { data: msgData, isLoading: msgLoading } = useQuery({ queryKey: ["settings-messaging"], queryFn: getMessagingConfig });
   const { data: credData, isLoading: credLoading } = useQuery({ queryKey: ["settings-calling-credentials"], queryFn: getCallingCredentials });
+  const { data: callData } = useQuery({ queryKey: ["settings-calling"], queryFn: getCallingConfig });
 
   const [selected, setSelected] = useState<string | null>(null);
   const [msgForm, setMsgForm] = useState<Record<string, string>>({});
@@ -130,6 +314,10 @@ function PhoneProviderCard() {
 
   const msgCfg = msgData?.data ?? {};
   const credCfg = credData?.data ?? {};
+  const callCfg = callData?.data ?? {};
+  // The provider actually live for calls right now — distinct from `active`
+  // below, which just tracks which button/form is selected for editing.
+  const activeProvider = credCfg.phone_provider || callCfg.phone_provider || "";
   const isLoading = msgLoading || credLoading;
 
   const derived = credCfg.vobiz_auth_id_set ? "vobiz" : (msgCfg.provider || "twilio");
@@ -185,12 +373,41 @@ function PhoneProviderCard() {
     onError: () => toast.error("Failed to save"),
   });
 
-  if (isLoading) return <div className="flex items-center justify-center h-24"><Loader2 className="w-5 h-5 animate-spin text-violet-500" /></div>;
+  // Switching providers is non-destructive — each provider keeps its own trunk
+  // IDs, this just changes which one calls are routed through. "" deactivates.
+  const activateMut = useMutation({
+    mutationFn: (provider: string) => activateProvider({ provider }),
+    onSuccess: (res) => {
+      toast.success(res.data.message || "Updated");
+      if (res.data.warning) toast.warning(res.data.warning);
+      qc.invalidateQueries({ queryKey: ["settings-calling-credentials"] });
+      qc.invalidateQueries({ queryKey: ["settings-calling"] });
+    },
+    onError: (err: { response?: { data?: { detail?: string } } }) =>
+      toast.error(err.response?.data?.detail || "Action failed"),
+  });
+
+  // Only what's needed for outbound calling — Auth ID/Token/Trunk ID/SIP URI are
+  // optional and only enable the extra "auto-route inbound calls" step.
+  const vobizFieldsReady = !!(
+    credCfg.vobiz_sip_domain && credCfg.vobiz_sip_username_set && credCfg.vobiz_sip_password_set &&
+    credCfg.vobiz_phone_number
+  );
+
+  const handleToggleProvider = (provider: string, isCurrentlyActive: boolean) => {
+    const msg = isCurrentlyActive
+      ? `Deactivate ${provider === "twilio" ? "Twilio" : "VoBiz"}? Outbound/inbound calls will stop working until you activate a provider.`
+      : `Switch calling to ${provider === "twilio" ? "Twilio" : "VoBiz"}? This only changes which number calls route through — no trunks are deleted.`;
+    if (!window.confirm(msg)) return;
+    activateMut.mutate(isCurrentlyActive ? "" : provider);
+  };
+
+  if (isLoading) return <div className="flex items-center justify-center h-24"><Loader2 className="w-5 h-5 animate-spin text-blue-500" /></div>;
 
   return (
     <div className="bg-white rounded-xl border border-gray-100 p-6 space-y-5">
       <div className="flex items-center gap-2 pb-2 border-b border-gray-100">
-        <KeyRound className="w-4 h-4 text-violet-600" />
+        <KeyRound className="w-4 h-4 text-blue-600" />
         <h3 className="font-semibold text-gray-800 text-sm">Phone Provider</h3>
         <span className="text-xs text-gray-400">— credentials encrypted in database</span>
       </div>
@@ -199,11 +416,14 @@ function PhoneProviderCard() {
       <div className="flex gap-2 flex-wrap">
         {PHONE_PROVIDERS.map((p) => (
           <button key={p} type="button" onClick={() => handleSelect(p)}
-            className={`px-4 py-2 rounded-lg text-sm font-medium border transition
+            className={`relative px-4 py-2 rounded-lg text-sm font-medium border transition
               ${active === p
-                ? "bg-violet-600 text-white border-violet-600"
-                : "border-gray-200 text-gray-600 hover:border-violet-400 hover:text-violet-600"}`}>
+                ? "bg-blue-600 text-white border-blue-600"
+                : "border-gray-200 text-gray-600 hover:border-blue-400 hover:text-blue-600"}`}>
             {p === "vobiz" ? "VoBiz" : p === "twilio" ? "Twilio" : p === "msg91" ? "MSG91" : p === "plivo" ? "Plivo" : "Custom"}
+            {activeProvider === p && (
+              <span className="ml-1.5 text-[10px] font-normal text-green-400">● Active</span>
+            )}
           </button>
         ))}
       </div>
@@ -215,16 +435,14 @@ function PhoneProviderCard() {
             <p className="font-semibold">How to get VoBiz credentials:</p>
             <ol className="list-decimal list-inside space-y-0.5 text-blue-600">
               <li>Create account at <span className="font-mono">console.vobiz.ai</span></li>
-              <li>API Keys → copy Auth ID and Auth Token</li>
-              <li>SIP Trunk → create trunk → copy Domain, Username, Password</li>
+              <li>SIP Trunk → create trunk → copy Domain, Username, Password (required for outbound)</li>
               <li>Phone Numbers → buy a number for caller ID</li>
+              <li>API Keys → copy Auth ID/Token, plus the trunk&apos;s ID (optional — only needed to auto-route inbound calls to LiveKit below)</li>
             </ol>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             {([
-              ["vobiz_auth_id",      "Auth ID (X-Auth-ID)",       "vobiz_auth_id_set"],
-              ["vobiz_auth_token",   "Auth Token (X-Auth-Token)",  "vobiz_auth_token_set"],
               ["vobiz_sip_username", "SIP Username",               "vobiz_sip_username_set"],
               ["vobiz_sip_password", "SIP Password",               "vobiz_sip_password_set"],
             ] as [string, string, string][]).map(([key, label, savedKey]) => (
@@ -236,7 +454,7 @@ function PhoneProviderCard() {
                   onFocus={() => clearVbMask(key)}
                   onChange={(e) => setVb(key, e.target.value)}
                   placeholder={credCfg[savedKey] ? "Type new value to replace" : `Enter ${label}`}
-                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500 font-mono" />
+                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono" />
               </div>
             ))}
           </div>
@@ -249,7 +467,7 @@ function PhoneProviderCard() {
               value={vbVal("vobiz_sip_domain") || credCfg.vobiz_sip_domain || ""}
               onChange={(e) => setVb("vobiz_sip_domain", e.target.value)}
               placeholder="yourcompany.sip.vobiz.ai"
-              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500 font-mono" />
+              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono" />
           </div>
 
           <div>
@@ -260,13 +478,61 @@ function PhoneProviderCard() {
               value={vbVal("vobiz_phone_number") || credCfg.vobiz_phone_number || ""}
               onChange={(e) => setVb("vobiz_phone_number", e.target.value)}
               placeholder="+91XXXXXXXXXX"
-              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500 font-mono" />
+              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono" />
           </div>
 
-          <button onClick={() => vbMut.mutate()} disabled={!dirty || vbMut.isPending}
-            className="flex items-center gap-2 px-5 py-2.5 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition">
-            {vbMut.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} Save & Encrypt
-          </button>
+          <div className="bg-gray-50 border border-gray-200 rounded-lg px-4 py-3 space-y-3">
+            <p className="text-xs font-semibold text-gray-600">
+              Optional — only needed to auto-route inbound calls to LiveKit. Outbound calling works without these.
+            </p>
+            <div className="grid grid-cols-2 gap-4">
+              {([
+                ["vobiz_auth_id",    "Auth ID (X-Auth-ID)",      "vobiz_auth_id_set"],
+                ["vobiz_auth_token", "Auth Token (X-Auth-Token)", "vobiz_auth_token_set"],
+              ] as [string, string, string][]).map(([key, label, savedKey]) => (
+                <div key={key}>
+                  <label className="block text-xs font-medium text-gray-600 mb-1.5">
+                    {label} {credCfg[savedKey] && <span className="text-green-500 ml-1">✓ saved</span>}
+                  </label>
+                  <input type="password" value={vbVal(key, credCfg[savedKey])}
+                    onFocus={() => clearVbMask(key)}
+                    onChange={(e) => setVb(key, e.target.value)}
+                    placeholder={credCfg[savedKey] ? "Type new value to replace" : `Enter ${label}`}
+                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono" />
+                </div>
+              ))}
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1.5">
+                VoBiz Trunk ID {credCfg.vobiz_trunk_id && <span className="text-green-500 ml-1">✓ saved</span>}
+              </label>
+              <input
+                value={vbVal("vobiz_trunk_id") || credCfg.vobiz_trunk_id || ""}
+                onChange={(e) => setVb("vobiz_trunk_id", e.target.value)}
+                placeholder="console.vobiz.ai → SIP Trunk → Outbound Trunks"
+                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono" />
+            </div>
+            <p className="text-xs text-gray-400">LiveKit SIP URI is set once in the &quot;LiveKit Project&quot; card above.</p>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <button onClick={() => vbMut.mutate()} disabled={!dirty || vbMut.isPending}
+              className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition">
+              {vbMut.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} Save & Encrypt
+            </button>
+            {activeProvider === "vobiz" ? (
+              <button onClick={() => handleToggleProvider("vobiz", true)} disabled={activateMut.isPending}
+                className="flex items-center gap-2 px-5 py-2.5 bg-red-50 hover:bg-red-100 border border-red-200 disabled:opacity-50 text-red-600 text-sm font-medium rounded-lg transition">
+                {activateMut.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : null} Deactivate VoBiz
+              </button>
+            ) : (
+              <button onClick={() => handleToggleProvider("vobiz", false)} disabled={!vobizFieldsReady || activateMut.isPending}
+                title={!vobizFieldsReady ? "Save all VoBiz fields first" : ""}
+                className="flex items-center gap-2 px-5 py-2.5 bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition">
+                {activateMut.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : null} Activate VoBiz
+              </button>
+            )}
+          </div>
         </div>
       )}
 
@@ -281,7 +547,7 @@ function PhoneProviderCard() {
               onFocus={() => clearMsgMask("api_key")}
               onChange={(e) => setMsg("api_key", e.target.value)}
               placeholder={msgCfg.api_key_set ? "Type new value to replace" : `Enter ${sidLabel}`}
-              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500 font-mono" />
+              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono" />
           </div>
 
           {hasSecret && (
@@ -293,7 +559,7 @@ function PhoneProviderCard() {
                 onFocus={() => clearMsgMask("api_secret")}
                 onChange={(e) => setMsg("api_secret", e.target.value)}
                 placeholder={msgCfg.api_secret_set ? "Type new value to replace" : "Enter Auth Token"}
-                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500 font-mono" />
+                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono" />
             </div>
           )}
 
@@ -303,20 +569,20 @@ function PhoneProviderCard() {
                 <label className="block text-xs font-medium text-gray-600 mb-1.5">Webhook URL</label>
                 <input value={msgVal("webhook_url")} onChange={(e) => setMsg("webhook_url", e.target.value)}
                   placeholder="https://your-api.com/send-message"
-                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500" />
+                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1.5">Extra Headers (JSON)</label>
                 <textarea value={msgVal("webhook_headers")} onChange={(e) => setMsg("webhook_headers", e.target.value)}
                   placeholder='{"Authorization": "Bearer your-key"}'
                   rows={2}
-                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500 resize-none font-mono" />
+                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none font-mono" />
               </div>
             </div>
           )}
 
           <button onClick={() => msgMut.mutate()} disabled={!dirty || msgMut.isPending}
-            className="flex items-center gap-2 px-5 py-2.5 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition">
+            className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition">
             {msgMut.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} Save & Encrypt
           </button>
         </div>
@@ -357,17 +623,17 @@ function CallNumbersCard() {
           <label className="block text-xs font-medium text-gray-600 mb-1.5">📞 Outbound Number</label>
           <input value={val("twilio_from_number")} onChange={e => set("twilio_from_number", e.target.value)}
             placeholder="+91XXXXXXXXXX — AI calls patients from this"
-            className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500 font-mono" />
+            className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono" />
         </div>
         <div>
           <label className="block text-xs font-medium text-gray-600 mb-1.5">📥 Inbound Number</label>
           <input value={val("inbound_phone_number")} onChange={e => set("inbound_phone_number", e.target.value)}
             placeholder="+91XXXXXXXXXX — patients call this"
-            className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500 font-mono" />
+            className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono" />
         </div>
       </div>
       <button onClick={() => mut.mutate()} disabled={!dirty || mut.isPending}
-        className="flex items-center gap-2 px-5 py-2.5 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition">
+        className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition">
         {mut.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} Save Numbers
       </button>
     </div>
@@ -393,10 +659,13 @@ function CallingTab() {
     onError: () => toast.error("Failed to save"),
   });
 
-  if (isLoading) return <div className="flex items-center justify-center h-32"><Loader2 className="w-5 h-5 animate-spin text-violet-500" /></div>;
+  if (isLoading) return <div className="flex items-center justify-center h-32"><Loader2 className="w-5 h-5 animate-spin text-blue-500" /></div>;
 
   return (
     <div className="max-w-2xl space-y-6">
+
+      {/* LiveKit Project Credentials — shared by every provider below */}
+      <LiveKitCredentialsCard />
 
       {/* Phone Provider Credentials */}
       <PhoneProviderCard />
@@ -407,7 +676,7 @@ function CallingTab() {
       {/* Call Schedule */}
       <div className="bg-white rounded-xl border border-gray-100 p-6 space-y-4">
         <div className="flex items-center gap-2 pb-2 border-b border-gray-100">
-          <CalendarDays className="w-4 h-4 text-violet-500" />
+          <CalendarDays className="w-4 h-4 text-blue-500" />
           <h3 className="font-semibold text-gray-800 text-sm">Call Schedule</h3>
           <span className="text-xs text-gray-400">— when the AI can make outbound calls</span>
         </div>
@@ -423,14 +692,14 @@ function CallingTab() {
               <input type={type} value={val(key, def)}
                 onChange={(e) => update(key, type === "number" ? parseInt(e.target.value) : e.target.value)}
                 {...(type === "number" ? { min: 1 } : {})}
-                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500" />
+                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
             </div>
           ))}
         </div>
       </div>
 
       <button onClick={() => mut.mutate()} disabled={!dirty || mut.isPending}
-        className="flex items-center gap-2 px-5 py-2.5 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition">
+        className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition">
         {mut.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} Save Schedule
       </button>
     </div>
@@ -531,7 +800,7 @@ function CalendarTab() {
     } finally { setTesting(false); }
   };
 
-  if (isLoading) return <div className="flex items-center justify-center h-32"><Loader2 className="w-5 h-5 animate-spin text-violet-500" /></div>;
+  if (isLoading) return <div className="flex items-center justify-center h-32"><Loader2 className="w-5 h-5 animate-spin text-blue-500" /></div>;
 
   return (
     <div className="max-w-2xl space-y-6">
@@ -539,7 +808,7 @@ function CalendarTab() {
       {/* Provider + sync toggle */}
       <div className="bg-white rounded-xl border border-gray-100 p-6 space-y-5">
         <div className="flex items-center gap-2 pb-2 border-b border-gray-100">
-          <CalendarDays className="w-4 h-4 text-violet-600" />
+          <CalendarDays className="w-4 h-4 text-blue-600" />
           <h3 className="font-semibold text-gray-800 text-sm">Calendar Provider</h3>
           <span className="text-xs text-gray-400">— appointments auto-sync when booked</span>
         </div>
@@ -550,8 +819,8 @@ function CalendarTab() {
             <button key={p.key} type="button" onClick={() => handleSelectProvider(p.key)}
               className={`px-4 py-2 rounded-lg text-sm font-medium border transition ${
                 activeProvider === p.key
-                  ? "bg-violet-600 text-white border-violet-600"
-                  : "border-gray-200 text-gray-600 hover:border-violet-400 hover:text-violet-600"
+                  ? "bg-blue-600 text-white border-blue-600"
+                  : "border-gray-200 text-gray-600 hover:border-blue-400 hover:text-blue-600"
               }`}>
               {p.label}
             </button>
@@ -568,7 +837,7 @@ function CalendarTab() {
               {cfg.is_active ? "Calendar sync is active" : "Calendar sync is disabled"}
             </span>
           </div>
-          <div className={`w-9 h-5 rounded-full transition-colors relative cursor-pointer ${cfg.is_active ? "bg-violet-500" : "bg-gray-200"}`}
+          <div className={`w-9 h-5 rounded-full transition-colors relative cursor-pointer ${cfg.is_active ? "bg-blue-500" : "bg-gray-200"}`}
             onClick={() => !toggleMut.isPending && toggleMut.mutate(!cfg.is_active)}>
             <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${cfg.is_active ? "translate-x-4" : "translate-x-0.5"}`} />
           </div>
@@ -602,7 +871,7 @@ function CalendarTab() {
               </label>
               <input value={val("calendar_id")} onChange={e => set("calendar_id", e.target.value)}
                 placeholder="primary  or  yourname@gmail.com"
-                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500 font-mono" />
+                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono" />
             </div>
 
             <div>
@@ -612,11 +881,11 @@ function CalendarTab() {
               <textarea value={credsJson} onChange={e => { setCredsJson(e.target.value); setDirty(true); }}
                 placeholder={cfg.credentials_set ? "Leave blank to keep existing credentials" : '{\n  "type": "service_account",\n  "project_id": "...",\n  ...\n}'}
                 rows={7}
-                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500 resize-none font-mono text-xs" />
+                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none font-mono text-xs" />
             </div>
 
             <button onClick={handleTestGoogle} disabled={testing || (!credsJson && !cfg.credentials_set)}
-              className="flex items-center gap-2 px-4 py-2.5 border border-violet-500 text-violet-600 hover:bg-violet-50 disabled:opacity-50 text-sm font-medium rounded-lg transition">
+              className="flex items-center gap-2 px-4 py-2.5 border border-blue-500 text-blue-600 hover:bg-blue-50 disabled:opacity-50 text-sm font-medium rounded-lg transition">
               {testing ? <Loader2 className="w-4 h-4 animate-spin" /> : <FlaskConical className="w-4 h-4" />} Test Connection
             </button>
           </>
@@ -637,14 +906,14 @@ function CalendarTab() {
               <label className="block text-xs font-medium text-gray-600 mb-1.5">CalDav Server URL</label>
               <input value={val("caldav_url") || CALDAV_DEFAULTS.apple} onChange={e => set("caldav_url", e.target.value)}
                 placeholder="https://caldav.icloud.com"
-                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500 font-mono" />
+                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono" />
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1.5">Apple ID (Email)</label>
                 <input value={val("caldav_username")} onChange={e => set("caldav_username", e.target.value)}
                   placeholder="your@icloud.com"
-                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500" />
+                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1.5">
@@ -655,11 +924,11 @@ function CalendarTab() {
                     onFocus={() => { if (form.caldav_password === undefined && cfg.caldav_password_set) { setForm(f => ({ ...f, caldav_password: "" })); setDirty(true); } }}
                     onChange={e => { setForm(f => ({ ...f, caldav_password: e.target.value })); setDirty(true); }}
                     placeholder={cfg.caldav_password_set ? "Type new value to replace" : "xxxx-xxxx-xxxx-xxxx"}
-                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500 font-mono" />
+                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono" />
               </div>
             </div>
             <button onClick={handleTestCalDav} disabled={testing || !val("caldav_url")}
-              className="flex items-center gap-2 px-4 py-2.5 border border-violet-500 text-violet-600 hover:bg-violet-50 disabled:opacity-50 text-sm font-medium rounded-lg transition">
+              className="flex items-center gap-2 px-4 py-2.5 border border-blue-500 text-blue-600 hover:bg-blue-50 disabled:opacity-50 text-sm font-medium rounded-lg transition">
               {testing ? <Loader2 className="w-4 h-4 animate-spin" /> : <FlaskConical className="w-4 h-4" />} Test Connection
             </button>
           </div>
@@ -680,14 +949,14 @@ function CalendarTab() {
               <label className="block text-xs font-medium text-gray-600 mb-1.5">CalDav URL</label>
               <input value={val("caldav_url")} onChange={e => set("caldav_url", e.target.value)}
                 placeholder="https://outlook.office365.com/caldav/v1/your@email.com/Calendar/"
-                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500 font-mono" />
+                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono" />
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1.5">Microsoft Email</label>
                 <input value={val("caldav_username")} onChange={e => set("caldav_username", e.target.value)}
                   placeholder="your@outlook.com"
-                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500" />
+                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1.5">
@@ -698,11 +967,11 @@ function CalendarTab() {
                     onFocus={() => { if (form.caldav_password === undefined && cfg.caldav_password_set) { setForm(f => ({ ...f, caldav_password: "" })); setDirty(true); } }}
                     onChange={e => { setForm(f => ({ ...f, caldav_password: e.target.value })); setDirty(true); }}
                     placeholder={cfg.caldav_password_set ? "Type new value to replace" : "Password or app password"}
-                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500" />
+                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
               </div>
             </div>
             <button onClick={handleTestCalDav} disabled={testing || !val("caldav_url")}
-              className="flex items-center gap-2 px-4 py-2.5 border border-violet-500 text-violet-600 hover:bg-violet-50 disabled:opacity-50 text-sm font-medium rounded-lg transition">
+              className="flex items-center gap-2 px-4 py-2.5 border border-blue-500 text-blue-600 hover:bg-blue-50 disabled:opacity-50 text-sm font-medium rounded-lg transition">
               {testing ? <Loader2 className="w-4 h-4 animate-spin" /> : <FlaskConical className="w-4 h-4" />} Test Connection
             </button>
           </div>
@@ -718,14 +987,14 @@ function CalendarTab() {
               <label className="block text-xs font-medium text-gray-600 mb-1.5">CalDav Server URL</label>
               <input value={val("caldav_url")} onChange={e => set("caldav_url", e.target.value)}
                 placeholder="https://your-server.com/remote.php/dav"
-                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500 font-mono" />
+                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono" />
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1.5">Username</label>
                 <input value={val("caldav_username")} onChange={e => set("caldav_username", e.target.value)}
                   placeholder="username or email"
-                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500" />
+                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1.5">
@@ -736,7 +1005,7 @@ function CalendarTab() {
                     onFocus={() => { if (form.caldav_password === undefined && cfg.caldav_password_set) { setForm(f => ({ ...f, caldav_password: "" })); setDirty(true); } }}
                     onChange={e => { setForm(f => ({ ...f, caldav_password: e.target.value })); setDirty(true); }}
                     placeholder={cfg.caldav_password_set ? "Type new value to replace" : "Password"}
-                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500" />
+                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
               </div>
             </div>
             <div>
@@ -746,10 +1015,10 @@ function CalendarTab() {
               </label>
               <input value={val("calendar_id")} onChange={e => set("calendar_id", e.target.value)}
                 placeholder="My Calendar"
-                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500" />
+                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
             </div>
             <button onClick={handleTestCalDav} disabled={testing || !val("caldav_url")}
-              className="flex items-center gap-2 px-4 py-2.5 border border-violet-500 text-violet-600 hover:bg-violet-50 disabled:opacity-50 text-sm font-medium rounded-lg transition">
+              className="flex items-center gap-2 px-4 py-2.5 border border-blue-500 text-blue-600 hover:bg-blue-50 disabled:opacity-50 text-sm font-medium rounded-lg transition">
               {testing ? <Loader2 className="w-4 h-4 animate-spin" /> : <FlaskConical className="w-4 h-4" />} Test Connection
             </button>
           </div>
@@ -766,7 +1035,7 @@ function CalendarTab() {
         )}
 
         <button onClick={() => saveMut.mutate()} disabled={!dirty || saveMut.isPending}
-          className="flex items-center gap-2 px-5 py-2.5 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition">
+          className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition">
           {saveMut.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} Save Calendar Settings
         </button>
       </div>
@@ -798,7 +1067,7 @@ function SMSTab() {
     onError: () => toast.error("Failed to save"),
   });
 
-  if (isLoading) return <div className="flex items-center justify-center h-32"><Loader2 className="w-5 h-5 animate-spin text-violet-500" /></div>;
+  if (isLoading) return <div className="flex items-center justify-center h-32"><Loader2 className="w-5 h-5 animate-spin text-blue-500" /></div>;
 
   const SMS_PROVIDERS = [
     { key: "twilio",   label: "Twilio",   hasSecret: true,  sidLabel: "Account SID" },
@@ -822,7 +1091,7 @@ function SMSTab() {
         <div className="flex gap-2 flex-wrap">
           {SMS_PROVIDERS.map(p => (
             <button key={p.key} type="button" onClick={() => set("provider", p.key)}
-              className={`px-4 py-2 rounded-lg text-sm font-medium border transition ${activeProvider === p.key ? "bg-violet-600 text-white border-violet-600" : "border-gray-200 text-gray-600 hover:border-violet-400 hover:text-violet-600"}`}>
+              className={`px-4 py-2 rounded-lg text-sm font-medium border transition ${activeProvider === p.key ? "bg-blue-600 text-white border-blue-600" : "border-gray-200 text-gray-600 hover:border-blue-400 hover:text-blue-600"}`}>
               {p.label}
             </button>
           ))}
@@ -837,7 +1106,7 @@ function SMSTab() {
             onFocus={() => clearMask("api_key")}
             onChange={e => set("api_key", e.target.value)}
             placeholder={cfg.api_key_set ? "Type new value to replace" : `Enter ${meta.sidLabel}`}
-            className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500 font-mono" />
+            className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono" />
         </div>
 
         {/* Auth Token */}
@@ -850,7 +1119,7 @@ function SMSTab() {
               onFocus={() => clearMask("api_secret")}
               onChange={e => set("api_secret", e.target.value)}
               placeholder={cfg.api_secret_set ? "Type new value to replace" : "Enter Auth Token"}
-              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500 font-mono" />
+              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono" />
           </div>
         )}
 
@@ -861,14 +1130,14 @@ function SMSTab() {
               <label className="block text-xs font-medium text-gray-600 mb-1.5">Webhook URL</label>
               <input value={val("webhook_url")} onChange={e => set("webhook_url", e.target.value)}
                 placeholder="https://your-api.com/send-sms"
-                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500" />
+                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1.5">Extra Headers (JSON)</label>
               <textarea value={val("webhook_headers")} onChange={e => set("webhook_headers", e.target.value)}
                 placeholder='{"Authorization": "Bearer your-key"}'
                 rows={2}
-                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500 resize-none font-mono" />
+                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none font-mono" />
             </div>
           </div>
         )}
@@ -878,7 +1147,7 @@ function SMSTab() {
           <label className="block text-xs font-medium text-gray-600 mb-1.5">💬 SMS Sender Number</label>
           <input value={val("from_number")} onChange={e => set("from_number", e.target.value)}
             placeholder="+91XXXXXXXXXX"
-            className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500 font-mono" />
+            className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono" />
         </div>
 
         {/* SMS enable toggle */}
@@ -887,14 +1156,14 @@ function SMSTab() {
             <p className="text-sm font-medium text-gray-800">Enable SMS</p>
             <p className="text-xs text-gray-400">Fallback when WhatsApp is off or unavailable</p>
           </div>
-          <div className={`w-10 h-6 rounded-full transition-colors relative cursor-pointer ${bval("is_sms_enabled") ? "bg-violet-500" : "bg-gray-200"}`}
+          <div className={`w-10 h-6 rounded-full transition-colors relative cursor-pointer ${bval("is_sms_enabled") ? "bg-blue-500" : "bg-gray-200"}`}
             onClick={() => set("is_sms_enabled", !bval("is_sms_enabled"))}>
             <span className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-transform ${bval("is_sms_enabled") ? "translate-x-5" : "translate-x-1"}`} />
           </div>
         </div>
 
         <button onClick={() => mut.mutate()} disabled={!dirty || mut.isPending}
-          className="flex items-center gap-2 px-5 py-2.5 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition">
+          className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition">
           {mut.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} Save & Encrypt
         </button>
       </div>
@@ -942,7 +1211,7 @@ function WhatsAppTab() {
     onError: () => toast.error("Failed to save"),
   });
 
-  if (isLoading) return <div className="flex items-center justify-center h-32"><Loader2 className="w-5 h-5 animate-spin text-violet-500" /></div>;
+  if (isLoading) return <div className="flex items-center justify-center h-32"><Loader2 className="w-5 h-5 animate-spin text-blue-500" /></div>;
 
   const WA_PROVIDERS = [
     { key: "twilio", label: "Twilio", hasSecret: true,  sidLabel: "Account SID" },
@@ -963,14 +1232,14 @@ function WhatsAppTab() {
           </div>
           <label className="flex items-center gap-2 cursor-pointer" onClick={handleSameToggle}>
             <span className="text-xs text-gray-500 select-none">Same as SMS</span>
-            <div className={`w-9 h-5 rounded-full transition-colors relative ${effectiveSame ? "bg-violet-500" : "bg-gray-200"}`}>
+            <div className={`w-9 h-5 rounded-full transition-colors relative ${effectiveSame ? "bg-blue-500" : "bg-gray-200"}`}>
               <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${effectiveSame ? "translate-x-4" : "translate-x-0.5"}`} />
             </div>
           </label>
         </div>
 
         {effectiveSame ? (
-          <div className="flex items-center gap-3 p-3 bg-violet-50 border border-violet-100 rounded-lg text-sm text-violet-700">
+          <div className="flex items-center gap-3 p-3 bg-blue-50 border border-blue-100 rounded-lg text-sm text-blue-700">
             <CheckCircle2 className="w-4 h-4 flex-shrink-0" />
             Using the same provider and credentials as SMS — configured in the SMS tab.
           </div>
@@ -979,7 +1248,7 @@ function WhatsAppTab() {
             <div className="flex gap-2 flex-wrap">
               {WA_PROVIDERS.map(p => (
                 <button key={p.key} type="button" onClick={() => set("whatsapp_provider", p.key)}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium border transition ${activeWAProvider === p.key ? "bg-violet-600 text-white border-violet-600" : "border-gray-200 text-gray-600 hover:border-violet-400 hover:text-violet-600"}`}>
+                  className={`px-4 py-2 rounded-lg text-sm font-medium border transition ${activeWAProvider === p.key ? "bg-blue-600 text-white border-blue-600" : "border-gray-200 text-gray-600 hover:border-blue-400 hover:text-blue-600"}`}>
                   {p.label}
                 </button>
               ))}
@@ -993,7 +1262,7 @@ function WhatsAppTab() {
                 onFocus={() => clearMask("whatsapp_api_key")}
                 onChange={e => set("whatsapp_api_key", e.target.value)}
                 placeholder={cfg.whatsapp_api_key_set ? "Type new value to replace" : `Enter ${waMeta.sidLabel}`}
-                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500 font-mono" />
+                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono" />
             </div>
 
             {waMeta.hasSecret && (
@@ -1005,7 +1274,7 @@ function WhatsAppTab() {
                   onFocus={() => clearMask("whatsapp_api_secret")}
                   onChange={e => set("whatsapp_api_secret", e.target.value)}
                   placeholder={cfg.whatsapp_api_secret_set ? "Type new value to replace" : "Enter Auth Token"}
-                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500 font-mono" />
+                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono" />
               </div>
             )}
           </>
@@ -1016,7 +1285,7 @@ function WhatsAppTab() {
           <label className="block text-xs font-medium text-gray-600 mb-1.5">💚 WhatsApp Business Number</label>
           <input value={val("whatsapp_number")} onChange={e => set("whatsapp_number", e.target.value)}
             placeholder="+91XXXXXXXXXX"
-            className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500 font-mono" />
+            className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono" />
         </div>
 
         {/* Enable toggle */}
@@ -1025,14 +1294,14 @@ function WhatsAppTab() {
             <p className="text-sm font-medium text-gray-800">Enable WhatsApp</p>
             <p className="text-xs text-gray-400">Confirmations sent on WhatsApp first, falls back to SMS</p>
           </div>
-          <div className={`w-10 h-6 rounded-full transition-colors relative cursor-pointer ${bval("is_whatsapp_enabled") ? "bg-violet-500" : "bg-gray-200"}`}
+          <div className={`w-10 h-6 rounded-full transition-colors relative cursor-pointer ${bval("is_whatsapp_enabled") ? "bg-blue-500" : "bg-gray-200"}`}
             onClick={() => set("is_whatsapp_enabled", !bval("is_whatsapp_enabled"))}>
             <span className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-transform ${bval("is_whatsapp_enabled") ? "translate-x-5" : "translate-x-1"}`} />
           </div>
         </div>
 
         <button onClick={() => mut.mutate()} disabled={!dirty || mut.isPending}
-          className="flex items-center gap-2 px-5 py-2.5 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition">
+          className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition">
           {mut.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} Save & Encrypt
         </button>
       </div>

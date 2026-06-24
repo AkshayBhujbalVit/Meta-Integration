@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -7,9 +7,8 @@ import { api } from "@/lib/api";
 import { toast } from "sonner";
 import {
   Loader2, Bell, XCircle, ChevronLeft, ChevronRight,
-  CalendarDays, CheckCircle2, Clock, RefreshCw, List,
+  CalendarDays, CheckCircle2, Clock, RefreshCw, List, X,
 } from "lucide-react";
-// CheckCircle2 kept for "No appointments" empty state
 import {
   format, startOfMonth, endOfMonth, startOfWeek, endOfWeek,
   eachDayOfInterval, isSameMonth, isSameDay, addMonths, subMonths, parseISO,
@@ -17,7 +16,8 @@ import {
 
 interface Appt {
   id: number;
-  patient_name: string;
+  lead_id: number;
+  patient_name: string;  // stored as lead name at booking time
   phone: string;
   appointment_date: string;
   appointment_type: string;
@@ -29,7 +29,7 @@ interface Appt {
 
 const STATUS_CHIP: Record<string, string> = {
   booked:    "bg-green-50 text-green-700 border-green-200",
-  confirmed: "bg-violet-50 text-violet-700 border-violet-200",
+  confirmed: "bg-blue-50 text-blue-700 border-blue-200",
   cancelled: "bg-red-50 text-red-500 border-red-200",
   completed: "bg-gray-50 text-gray-500 border-gray-200",
   no_show:   "bg-amber-50 text-amber-700 border-amber-200",
@@ -37,10 +37,12 @@ const STATUS_CHIP: Record<string, string> = {
 
 export default function AppointmentsPage() {
   const qc = useQueryClient();
-  const [view, setView]           = useState<"calendar" | "all">("calendar");
-  const [month, setMonth]         = useState(new Date());
-  const [selectedDate, setSelectedDate] = useState<Date | null>(new Date());
+  const [view, setView]                   = useState<"calendar" | "all">("calendar");
+  const [month, setMonth]                 = useState(new Date());
+  const [selectedDate, setSelectedDate]   = useState<Date | null>(new Date());
   const [rescheduleAppt, setRescheduleAppt] = useState<Appt | null>(null);
+  const [cancelTarget, setCancelTarget]   = useState<Appt | null>(null);
+  const [cancelReason, setCancelReason]   = useState("");
 
   const { data, isLoading } = useQuery({
     queryKey: ["appointments"],
@@ -49,19 +51,31 @@ export default function AppointmentsPage() {
   const appointments: Appt[] = data?.data ?? [];
 
   const cancelMut = useMutation({
-    mutationFn: ({ id, reason }: { id: number; reason: string }) => cancelAppointment(id, reason),
-    onSuccess: () => { toast.success("Appointment cancelled"); qc.invalidateQueries({ queryKey: ["appointments"] }); },
+    mutationFn: ({ id, reason }: { id: number; reason: string }) =>
+      cancelAppointment(id, reason),
+    onSuccess: () => {
+      toast.success("Appointment cancelled");
+      setCancelTarget(null);
+      setCancelReason("");
+      qc.invalidateQueries({ queryKey: ["appointments"] });
+    },
     onError: () => toast.error("Failed to cancel"),
   });
+
   const reminderMut = useMutation({
     mutationFn: (id: number) => sendReminder(id),
     onSuccess: () => toast.success("Reminder sent via WhatsApp"),
     onError: () => toast.error("Failed to send reminder"),
   });
 
+  const handleCancel = (appt: Appt) => {
+    setCancelTarget(appt);
+    setCancelReason("");
+  };
+
   // ── calendar helpers ──────────────────────────────────────────────────────
   const today = new Date();
-  const monthStart  = startOfMonth(month);
+  const monthStart = startOfMonth(month);
   const days = eachDayOfInterval({
     start: startOfWeek(monthStart, { weekStartsOn: 1 }),
     end:   endOfWeek(endOfMonth(month), { weekStartsOn: 1 }),
@@ -74,13 +88,11 @@ export default function AppointmentsPage() {
     });
 
   const selectedAppts = selectedDate ? apptsByDate(selectedDate) : [];
-
-  // ── all-view list: sorted by date+time ───────────────────────────────────
   const allSorted = [...appointments]
     .filter((a) => a.status !== "cancelled")
     .sort((a, b) => new Date(a.appointment_date).getTime() - new Date(b.appointment_date).getTime());
 
-  const active = appointments.filter((a) => a.status !== "cancelled").length;
+  const active     = appointments.filter((a) => a.status !== "cancelled").length;
   const todayCount = apptsByDate(today).length;
 
   return (
@@ -91,7 +103,7 @@ export default function AppointmentsPage() {
           <h1 className="text-xl font-bold text-gray-900">Appointments</h1>
           <p className="text-sm text-gray-500">
             {active} active
-            {todayCount > 0 && <> · <span className="text-violet-600 font-medium">{todayCount} today</span></>}
+            {todayCount > 0 && <> · <span className="text-blue-600 font-medium">{todayCount} today</span></>}
           </p>
         </div>
         <div className="flex bg-gray-100 p-1 rounded-xl gap-1">
@@ -103,14 +115,14 @@ export default function AppointmentsPage() {
           <button onClick={() => setView("all")}
             className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition
               ${view === "all" ? "bg-white shadow-sm text-gray-900" : "text-gray-500 hover:text-gray-700"}`}>
-            <List className="w-4 h-4" /> All Appointments
+            <List className="w-4 h-4" /> All
           </button>
         </div>
       </div>
 
       {isLoading ? (
         <div className="flex items-center justify-center h-48">
-          <Loader2 className="w-6 h-6 animate-spin text-violet-500" />
+          <Loader2 className="w-6 h-6 animate-spin text-blue-500" />
         </div>
       ) : view === "calendar" ? (
         <CalendarSection
@@ -121,20 +133,14 @@ export default function AppointmentsPage() {
           onMonthPrev={() => setMonth(subMonths(month, 1))}
           onMonthNext={() => setMonth(addMonths(month, 1))}
           onDateSelect={(d) => setSelectedDate(isSameDay(d, selectedDate ?? new Date("")) ? null : d)}
-          onCancel={(id) => {
-            const r = window.prompt("Cancellation reason (optional):");
-            if (r !== null) cancelMut.mutate({ id, reason: r });
-          }}
+          onCancel={handleCancel}
           onReminder={(id) => reminderMut.mutate(id)}
           onReschedule={(a) => setRescheduleAppt(a)}
         />
       ) : (
         <AllView
           appointments={allSorted}
-          onCancel={(id) => {
-            const r = window.prompt("Cancellation reason (optional):");
-            if (r !== null) cancelMut.mutate({ id, reason: r });
-          }}
+          onCancel={handleCancel}
           onReminder={(id) => reminderMut.mutate(id)}
           onReschedule={(a) => setRescheduleAppt(a)}
         />
@@ -147,6 +153,57 @@ export default function AppointmentsPage() {
           onClose={() => setRescheduleAppt(null)}
           onSaved={() => { setRescheduleAppt(null); qc.invalidateQueries({ queryKey: ["appointments"] }); }}
         />
+      )}
+
+      {/* Cancel confirmation modal */}
+      {cancelTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm mx-4 overflow-hidden">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+              <div>
+                <h3 className="font-bold text-gray-900">Cancel Appointment</h3>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  {cancelTarget.patient_name || cancelTarget.phone}
+                </p>
+              </div>
+              <button onClick={() => setCancelTarget(null)} className="text-gray-400 hover:text-gray-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="text-xs font-medium text-gray-600">
+                  Reason <span className="text-gray-400 font-normal">(optional)</span>
+                </label>
+                <input
+                  value={cancelReason}
+                  onChange={e => setCancelReason(e.target.value)}
+                  placeholder="e.g. Lead requested cancellation"
+                  className="mt-1 w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-400"
+                  onKeyDown={e => e.key === "Enter" && cancelMut.mutate({ id: cancelTarget.id, reason: cancelReason })}
+                />
+              </div>
+            </div>
+            <div className="flex gap-3 px-6 py-4 border-t border-gray-100">
+              <button
+                onClick={() => { setCancelTarget(null); setCancelReason(""); }}
+                className="flex-1 py-2 border border-gray-200 text-sm text-gray-600 rounded-lg hover:bg-gray-50"
+              >
+                Keep it
+              </button>
+              <button
+                onClick={() => cancelMut.mutate({ id: cancelTarget.id, reason: cancelReason })}
+                disabled={cancelMut.isPending}
+                className="flex-1 py-2 bg-red-500 hover:bg-red-600 disabled:opacity-50 text-white text-sm font-medium rounded-lg flex items-center justify-center gap-2"
+              >
+                {cancelMut.isPending
+                  ? <Loader2 className="w-4 h-4 animate-spin" />
+                  : <XCircle className="w-4 h-4" />}
+                Cancel Appointment
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
@@ -164,15 +221,14 @@ function CalendarSection({
   selectedAppts: Appt[];
   onMonthPrev: () => void; onMonthNext: () => void;
   onDateSelect: (d: Date) => void;
-  onCancel: (id: number) => void;
+  onCancel: (a: Appt) => void;
   onReminder: (id: number) => void;
   onReschedule: (a: Appt) => void;
 }) {
   return (
     <div className="space-y-4">
-      {/* Calendar grid */}
       <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
-        {/* Month navigation */}
+        {/* Month nav */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
           <button onClick={onMonthPrev} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 transition">
             <ChevronLeft className="w-4 h-4" />
@@ -193,36 +249,34 @@ function CalendarSection({
         {/* Days */}
         <div className="grid grid-cols-7">
           {days.map((day) => {
-            const dayAppts = apptsByDate(day);
-            const isToday  = isSameDay(day, today);
-            const isSel    = selectedDate ? isSameDay(day, selectedDate) : false;
-            const inMonth  = isSameMonth(day, month);
-            const hasOnline = dayAppts.some((a) => a.appointment_type !== "in_clinic");
-            const hasClinic = dayAppts.some((a) => a.appointment_type === "in_clinic");
+            const dayAppts  = apptsByDate(day);
+            const isToday   = isSameDay(day, today);
+            const isSel     = selectedDate ? isSameDay(day, selectedDate) : false;
+            const inMonth   = isSameMonth(day, month);
+            const hasOnline = dayAppts.some((a) => a.appointment_type !== "in_person");
+            const hasClinic = dayAppts.some((a) => a.appointment_type === "in_person");
 
             return (
               <div key={day.toISOString()} onClick={() => onDateSelect(day)}
                 className={`min-h-[72px] p-2 border-b border-r border-gray-50 cursor-pointer transition-colors
-                  ${!inMonth ? "bg-gray-50/40 opacity-40" : "hover:bg-violet-50/30"}
-                  ${isSel ? "bg-violet-50 ring-2 ring-inset ring-violet-400" : ""}`}>
+                  ${!inMonth ? "bg-gray-50/40 opacity-40" : "hover:bg-blue-50/30"}
+                  ${isSel ? "bg-blue-50 ring-2 ring-inset ring-blue-400" : ""}`}>
                 <div className={`w-6 h-6 flex items-center justify-center rounded-full text-xs font-semibold mb-1
-                  ${isToday ? "bg-violet-600 text-white" : "text-gray-700"}`}>
+                  ${isToday ? "bg-blue-600 text-white" : "text-gray-700"}`}>
                   {format(day, "d")}
                 </div>
-                {/* appointment chips */}
                 <div className="space-y-0.5">
                   {dayAppts.slice(0, 2).map((a) => (
                     <div key={a.id}
                       className={`text-[10px] px-1.5 py-0.5 rounded font-medium truncate
-                        ${a.appointment_type === "in_clinic" ? "bg-orange-100 text-orange-700" : "bg-blue-100 text-blue-700"}`}>
-                      {a.patient_name?.split(" ")[0] || "Patient"}
+                        ${a.appointment_type === "in_person" ? "bg-orange-100 text-orange-700" : "bg-blue-100 text-blue-700"}`}>
+                      {a.patient_name?.split(" ")[0] || "Lead"}
                     </div>
                   ))}
                   {dayAppts.length > 2 && (
                     <div className="text-[10px] text-gray-400 px-1">+{dayAppts.length - 2} more</div>
                   )}
                 </div>
-                {/* dots */}
                 {dayAppts.length > 0 && (
                   <div className="flex gap-0.5 mt-1">
                     {hasOnline && <span className="w-1.5 h-1.5 rounded-full bg-blue-400" />}
@@ -236,17 +290,16 @@ function CalendarSection({
 
         {/* Legend */}
         <div className="flex items-center gap-5 px-5 py-2.5 border-t border-gray-100 text-xs text-gray-400">
-          <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded bg-blue-100 border border-blue-200" /> Online</span>
-          <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded bg-orange-100 border border-orange-200" /> In-Clinic</span>
-          <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-violet-500" /> Has appointments</span>
+          <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded bg-blue-100 border border-blue-200" /> Online / Video</span>
+          <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded bg-orange-100 border border-orange-200" /> In-Person</span>
         </div>
       </div>
 
-      {/* Selected day appointments — below calendar */}
+      {/* Selected day */}
       <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
         <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100">
           <div className="flex items-center gap-2">
-            <CalendarDays className="w-4 h-4 text-violet-500" />
+            <CalendarDays className="w-4 h-4 text-blue-500" />
             <span className="text-sm font-semibold text-gray-800">
               {selectedDate ? format(selectedDate, "EEEE, d MMMM yyyy") : "Select a date to see appointments"}
             </span>
@@ -268,26 +321,7 @@ function CalendarSection({
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-left text-xs text-gray-400 bg-gray-50/50 border-b border-gray-100">
-                  <th className="px-5 py-3 font-medium">Patient</th>
-                  <th className="px-5 py-3 font-medium">Phone</th>
-                  <th className="px-5 py-3 font-medium">Date</th>
-                  <th className="px-5 py-3 font-medium">Time</th>
-                  <th className="px-5 py-3 font-medium">Type</th>
-                  <th className="px-5 py-3 font-medium">Inquiry</th>
-                  <th className="px-5 py-3 font-medium">Status</th>
-                  <th className="px-5 py-3 font-medium">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-50">
-                {selectedAppts.map((a) => (
-                  <ApptRow key={a.id} a={a}
-                    onCancel={onCancel} onReminder={onReminder} onReschedule={onReschedule} />
-                ))}
-              </tbody>
-            </table>
+            <ApptTable appts={selectedAppts} onCancel={onCancel} onReminder={onReminder} onReschedule={onReschedule} />
           </div>
         )}
       </div>
@@ -299,11 +333,10 @@ function CalendarSection({
 
 function AllView({ appointments, onCancel, onReminder, onReschedule }: {
   appointments: Appt[];
-  onCancel: (id: number) => void;
+  onCancel: (a: Appt) => void;
   onReminder: (id: number) => void;
   onReschedule: (a: Appt) => void;
 }) {
-  // group by date
   const groups: { date: string; appts: Appt[] }[] = [];
   appointments.forEach((a) => {
     try {
@@ -316,8 +349,9 @@ function AllView({ appointments, onCancel, onReminder, onReschedule }: {
 
   if (appointments.length === 0) {
     return (
-      <div className="bg-white rounded-xl border border-gray-100 flex items-center justify-center h-48 text-gray-300">
-        No active appointments
+      <div className="bg-white rounded-xl border border-gray-100 flex flex-col items-center justify-center h-48 gap-2 text-gray-300">
+        <CalendarDays className="w-8 h-8" />
+        <span className="text-sm">No active appointments</span>
       </div>
     );
   }
@@ -327,41 +361,53 @@ function AllView({ appointments, onCancel, onReminder, onReschedule }: {
       {groups.map(({ date, appts }) => (
         <div key={date} className="bg-white rounded-xl border border-gray-100 overflow-hidden">
           <div className="px-5 py-3 bg-gray-50/60 border-b border-gray-100 flex items-center gap-2">
-            <CalendarDays className="w-4 h-4 text-violet-500" />
+            <CalendarDays className="w-4 h-4 text-blue-500" />
             <span className="text-sm font-semibold text-gray-700">{date}</span>
             <span className="text-xs text-gray-400 ml-1">· {appts.length} appointment{appts.length > 1 ? "s" : ""}</span>
           </div>
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-left text-xs text-gray-400 border-b border-gray-100">
-                <th className="px-5 py-2.5 font-medium">Patient</th>
-                <th className="px-5 py-2.5 font-medium">Phone</th>
-                <th className="px-5 py-2.5 font-medium">Date</th>
-                <th className="px-5 py-2.5 font-medium">Time</th>
-                <th className="px-5 py-2.5 font-medium">Type</th>
-                <th className="px-5 py-2.5 font-medium">Inquiry</th>
-                <th className="px-5 py-2.5 font-medium">Status</th>
-                <th className="px-5 py-2.5 font-medium">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-50">
-              {appts.map((a) => (
-                <ApptRow key={a.id} a={a}
-                  onCancel={onCancel} onReminder={onReminder} onReschedule={onReschedule} />
-              ))}
-            </tbody>
-          </table>
+          <ApptTable appts={appts} onCancel={onCancel} onReminder={onReminder} onReschedule={onReschedule} />
         </div>
       ))}
     </div>
   );
 }
 
-// ── Shared appointment row ────────────────────────────────────────────────────
+// ── Shared table ──────────────────────────────────────────────────────────────
+
+function ApptTable({ appts, onCancel, onReminder, onReschedule }: {
+  appts: Appt[];
+  onCancel: (a: Appt) => void;
+  onReminder: (id: number) => void;
+  onReschedule: (a: Appt) => void;
+}) {
+  return (
+    <table className="w-full text-sm">
+      <thead>
+        <tr className="text-left text-xs text-gray-400 bg-gray-50/50 border-b border-gray-100">
+          <th className="px-5 py-3 font-medium">Lead / Contact</th>
+          <th className="px-5 py-3 font-medium">Phone</th>
+          <th className="px-5 py-3 font-medium">Date</th>
+          <th className="px-5 py-3 font-medium">Time</th>
+          <th className="px-5 py-3 font-medium">Type</th>
+          <th className="px-5 py-3 font-medium">Topic</th>
+          <th className="px-5 py-3 font-medium">Status</th>
+          <th className="px-5 py-3 font-medium">Actions</th>
+        </tr>
+      </thead>
+      <tbody className="divide-y divide-gray-50">
+        {appts.map((a) => (
+          <ApptRow key={a.id} a={a} onCancel={onCancel} onReminder={onReminder} onReschedule={onReschedule} />
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
+// ── Appointment row ───────────────────────────────────────────────────────────
 
 function ApptRow({ a, onCancel, onReminder, onReschedule }: {
   a: Appt;
-  onCancel: (id: number) => void;
+  onCancel: (a: Appt) => void;
   onReminder: (id: number) => void;
   onReschedule: (a: Appt) => void;
 }) {
@@ -373,48 +419,33 @@ function ApptRow({ a, onCancel, onReminder, onReschedule }: {
     timeStr = format(parsed, "h:mm a");
   } catch { /* */ }
 
-  const isOnline = a.appointment_type !== "in_clinic";
+  const isOnline = a.appointment_type !== "in_person";
   const canAct   = a.status !== "cancelled" && a.status !== "completed" && a.status !== "no_show";
 
   return (
     <tr className="hover:bg-gray-50/40 transition border-b border-gray-50 last:border-0">
-      {/* Patient */}
       <td className="px-5 py-3.5 font-semibold text-gray-900">{a.patient_name || "—"}</td>
-
-      {/* Phone */}
       <td className="px-5 py-3.5 text-gray-400 font-mono text-xs">{a.phone}</td>
-
-      {/* Date — separate column */}
       <td className="px-5 py-3.5 text-gray-600 text-sm font-medium">{dateStr}</td>
-
-      {/* Time — separate column */}
       <td className="px-5 py-3.5">
         <span className="flex items-center gap-1.5 text-gray-700 text-sm font-semibold">
-          <Clock className="w-3.5 h-3.5 text-violet-400" />
+          <Clock className="w-3.5 h-3.5 text-blue-400" />
           {timeStr}
         </span>
       </td>
-
-      {/* Type — Online or In-Clinic only, clean badge */}
       <td className="px-5 py-3.5">
         <span className={`inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full font-semibold
           ${isOnline ? "bg-blue-50 text-blue-700" : "bg-orange-50 text-orange-700"}`}>
           <span className={`w-1.5 h-1.5 rounded-full ${isOnline ? "bg-blue-500" : "bg-orange-500"}`} />
-          {isOnline ? "Online" : "In-Clinic"}
+          {isOnline ? "Online" : "In-Person"}
         </span>
       </td>
-
-      {/* Inquiry */}
       <td className="px-5 py-3.5 text-gray-500 text-xs max-w-[140px] truncate">{a.inquiry_type || "—"}</td>
-
-      {/* Status */}
       <td className="px-5 py-3.5">
         <span className={`text-xs px-2.5 py-0.5 rounded-full font-medium border ${STATUS_CHIP[a.status] || "bg-gray-50 text-gray-500 border-gray-200"}`}>
           {a.status.charAt(0).toUpperCase() + a.status.slice(1)}
         </span>
       </td>
-
-      {/* Actions — text buttons */}
       <td className="px-5 py-3.5">
         {canAct ? (
           <div className="flex items-center gap-1.5">
@@ -423,10 +454,10 @@ function ApptRow({ a, onCancel, onReminder, onReschedule }: {
               <RefreshCw className="w-3 h-3" /> Reschedule
             </button>
             <button onClick={() => onReminder(a.id)}
-              className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-violet-600 bg-violet-50 hover:bg-violet-100 rounded-lg transition">
+              className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition">
               <Bell className="w-3 h-3" /> Remind
             </button>
-            <button onClick={() => onCancel(a.id)}
+            <button onClick={() => onCancel(a)}
               className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-red-500 bg-red-50 hover:bg-red-100 rounded-lg transition">
               <XCircle className="w-3 h-3" /> Cancel
             </button>
@@ -439,7 +470,7 @@ function ApptRow({ a, onCancel, onReminder, onReschedule }: {
   );
 }
 
-// ── Reschedule / Update modal ─────────────────────────────────────────────────
+// ── Reschedule modal ──────────────────────────────────────────────────────────
 
 function RescheduleModal({ appt, onClose, onSaved }: {
   appt: Appt;
@@ -474,29 +505,27 @@ function RescheduleModal({ appt, onClose, onSaved }: {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm">
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-md mx-4 overflow-hidden">
-        {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
           <div>
             <h3 className="font-bold text-gray-900">Reschedule / Update</h3>
             <p className="text-xs text-gray-400 mt-0.5">{appt.patient_name || appt.phone}</p>
           </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl font-light">×</button>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+            <X className="w-5 h-5" />
+          </button>
         </div>
 
-        {/* Body */}
         <div className="p-6 space-y-4">
-          {/* Date & Time */}
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1.5">New Date & Time</label>
             <input type="datetime-local" value={date} onChange={(e) => setDate(e.target.value)}
-              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500" />
+              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
           </div>
 
-          {/* Type */}
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1.5">Appointment Type</label>
             <div className="grid grid-cols-2 gap-2">
-              {[["online","Online"],["in_clinic","In-Clinic"]].map(([val, label]) => (
+              {[["online","Online / Video"],["in_person","In-Person"]].map(([val, label]) => (
                 <button key={val} type="button" onClick={() => setType(val)}
                   className={`px-4 py-2.5 rounded-lg border text-sm font-medium transition
                     ${type === val
@@ -508,20 +537,18 @@ function RescheduleModal({ appt, onClose, onSaved }: {
             </div>
           </div>
 
-          {/* Notes */}
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1.5">Notes (optional)</label>
             <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2}
               placeholder="Any special instructions..."
-              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500 resize-none" />
+              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" />
           </div>
         </div>
 
-        {/* Footer */}
         <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-100 bg-gray-50/50">
           <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 transition">Cancel</button>
           <button onClick={save} disabled={saving}
-            className="flex items-center gap-2 px-5 py-2 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition">
+            className="flex items-center gap-2 px-5 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition">
             {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
             Save Changes
           </button>
