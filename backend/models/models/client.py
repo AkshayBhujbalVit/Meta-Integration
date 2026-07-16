@@ -24,10 +24,20 @@ class Client(Base):
     # e.g. POST /webhooks/hubspot/<webhook_token>
     webhook_token = Column(String(36), nullable=True, unique=True, index=True)
 
-    # Meta Lead Ads integration
+    # Branding — shown on this doctor's own dashboard/login
+    logo_url = Column(String(500), nullable=True)
+    primary_color = Column(String(20), nullable=True)
+
+    # Meta Lead Ads integration — Page token used for lead fetching
     meta_page_id = Column(String(100), nullable=True, index=True)
     meta_page_name = Column(String(255), nullable=True)
     meta_access_token = Column(Text, nullable=True)   # encrypted
+
+    # Meta Ads — long-lived user token + selected ad account, for this
+    # client's own Campaign/Ad Set/Lead Form sync (separate from the Page
+    # token above). Mirrors PlatformIntegration's fields but per-tenant.
+    meta_user_access_token = Column(Text, nullable=True)  # encrypted
+    meta_ad_account_id = Column(String(50), nullable=True)
 
     # HubSpot CRM integration
     hubspot_portal_id = Column(String(50), nullable=True)

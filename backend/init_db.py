@@ -228,6 +228,17 @@ def add_missing_columns():
         "ALTER TABLE calling_config ADD COLUMN IF NOT EXISTS twilio_outbound_trunk_id VARCHAR(100)",
         "ALTER TABLE calling_config ADD COLUMN IF NOT EXISTS twilio_inbound_trunk_id VARCHAR(100)",
         "ALTER TABLE calling_config ADD COLUMN IF NOT EXISTS twilio_dispatch_rule_id VARCHAR(100)",
+        # ── v7.0 — Real per-tenant auth + per-doctor Meta OAuth + branding ────
+        "ALTER TABLE admin ADD COLUMN IF NOT EXISTS client_id INTEGER REFERENCES client(id) ON DELETE CASCADE",
+        "CREATE INDEX IF NOT EXISTS ix_admin_client_id ON admin(client_id)",
+        "ALTER TABLE client ADD COLUMN IF NOT EXISTS logo_url VARCHAR(500)",
+        "ALTER TABLE client ADD COLUMN IF NOT EXISTS primary_color VARCHAR(20)",
+        "ALTER TABLE client ADD COLUMN IF NOT EXISTS meta_user_access_token TEXT",
+        "ALTER TABLE client ADD COLUMN IF NOT EXISTS meta_ad_account_id VARCHAR(50)",
+        "ALTER TABLE meta_lead_form ADD COLUMN IF NOT EXISTS client_id INTEGER REFERENCES client(id) ON DELETE CASCADE",
+        "CREATE INDEX IF NOT EXISTS ix_meta_lead_form_client_id ON meta_lead_form(client_id)",
+        "ALTER TABLE meta_synced_campaign ADD COLUMN IF NOT EXISTS client_id INTEGER REFERENCES client(id) ON DELETE CASCADE",
+        "CREATE INDEX IF NOT EXISTS ix_meta_synced_campaign_client_id ON meta_synced_campaign(client_id)",
     ]
     for sql in migrations:
         try:

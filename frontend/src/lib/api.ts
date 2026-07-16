@@ -213,6 +213,14 @@ export const updateClient = (id: number, data: Record<string, string | boolean |
 
 export const deleteClient = (id: number) => api.delete(`/clients/${id}`);
 
+export const uploadClientLogo = (id: number, file: File) => {
+  const form = new FormData();
+  form.append("file", file);
+  return api.post(`/clients/${id}/logo`, form, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+};
+
 export const connectMetaPage = (clientId: number, data: {
   meta_page_id: string; meta_page_name?: string; meta_access_token: string;
 }) => api.post(`/clients/${clientId}/connect-meta`, data);

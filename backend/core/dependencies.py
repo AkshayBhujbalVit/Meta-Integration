@@ -30,3 +30,16 @@ def get_current_admin(
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Admin not found")
 
     return admin
+
+
+def verify_client_access(client_id: int, admin: Admin = Depends(get_current_admin)) -> int:
+    """
+    Dependency for any route shaped /.../{client_id}/....
+
+    Tenant admins (admin.client_id set) may only ever touch their own client —
+    the client_id in the URL is never trusted on its own. Super-admins
+    (admin.client_id is None, i.e. Vidushi staff) may access any client_id.
+    """
+    if admin.client_id is not None and admin.client_id != client_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized for this client")
+    return client_id

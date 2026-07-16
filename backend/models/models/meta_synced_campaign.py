@@ -1,4 +1,4 @@
-from sqlalchemy import Column, DateTime, Integer, String
+from sqlalchemy import Column, DateTime, ForeignKey, Integer, String
 from sqlalchemy.sql import func
 
 from .base import Base
@@ -14,6 +14,10 @@ class MetaSyncedCampaign(Base):
 
     id = Column(Integer, primary_key=True)
     external_id = Column(String(50), nullable=False, unique=True, index=True)  # Meta campaign or ad set ID
+
+    # Which tenant this synced row belongs to. NULL = synced under the
+    # platform-level (super-admin) Meta connection rather than a client's own.
+    client_id = Column(Integer, ForeignKey("client.id", ondelete="CASCADE"), nullable=True, index=True)
 
     level = Column(String(10), nullable=False)  # 'campaign' | 'adset'
     parent_external_id = Column(String(50), nullable=True, index=True)  # owning campaign's external_id, for ad sets

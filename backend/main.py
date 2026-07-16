@@ -1,7 +1,9 @@
+import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from core.config import ALLOWED_ORIGINS
 from routers import auth, leads, kb, calling, appointments, sms, settings
@@ -72,6 +74,11 @@ app.include_router(webhooks.router)
 app.include_router(integrations.router)
 app.include_router(oauth.router)
 app.include_router(dev.router)
+
+# Serve uploaded files (client logos, KB docs) — e.g. /uploads/client_logos/<file>
+_UPLOAD_DIR = os.path.join(os.path.dirname(__file__), "uploads")
+os.makedirs(_UPLOAD_DIR, exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=_UPLOAD_DIR), name="uploads")
 
 
 @app.get("/")

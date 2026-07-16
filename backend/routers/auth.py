@@ -10,6 +10,7 @@ from core.database import get_db
 from core.dependencies import get_current_admin
 from core.security import create_access_token, hash_password, verify_password
 from models.models.admin import Admin, UserSession
+from models.models.client import Client
 from models.models.system import AdminLoginLog
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
@@ -47,6 +48,15 @@ class ChangePasswordRequest(BaseModel):
     new_password: str
 
 
+class SignupRequest(BaseModel):
+    business_name: str        # doctor's clinic/practice name -> Client.name
+    full_name: str            # doctor's own name -> Admin.full_name
+    email: str
+    password: str
+    phone: str | None = None
+    business_type: str | None = None
+
+
 def _log_login(db: Session, admin_id: int | None, email: str, ip: str, success: bool, reason: str | None = None):
     db.add(AdminLoginLog(
         admin_id=admin_id,
@@ -78,7 +88,7 @@ def login(payload: LoginRequest, request: Request, db: Session = Depends(get_db)
     # Successful login — clear the rate-limit counter for this IP
     _clear_rate_limit(ip)
 
-    token = create_access_token({"sub": str(admin.id), "email": admin.email})
+    token = create_access_token({"sub": str(admin.id), "email": admin.email, "client_id": admin.client_id})
 
     db.add(UserSession(admin_id=admin.id, token=token, is_active=True))
     _log_login(db, admin.id, payload.email, ip, True)
@@ -90,6 +100,49 @@ def login(payload: LoginRequest, request: Request, db: Session = Depends(get_db)
             "id": admin.id,
             "email": admin.email,
             "full_name": admin.full_name,
+            "client_id": admin.client_id,
+        },
+    }
+
+
+@router.post("/signup", status_code=201)
+def signup(payload: SignupRequest, db: Session = Depends(get_db)):
+    """Self-service doctor signup: creates a new Client (tenant) and its first Admin together."""
+    if db.query(Admin).filter_by(email=payload.email).first():
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email already registered")
+
+    client = Client(
+        name=payload.business_name,
+        business_type=payload.business_type,
+        phone=payload.phone,
+        email=payload.email,
+    )
+    db.add(client)
+    db.flush()  # assign client.id before creating the admin row
+
+    admin = Admin(
+        email=payload.email,
+        password_hash=hash_password(payload.password),
+        full_name=payload.full_name,
+        phone=payload.phone,
+        client_id=client.id,
+    )
+    db.add(admin)
+    db.commit()
+    db.refresh(admin)
+
+    token = create_access_token({"sub": str(admin.id), "email": admin.email, "client_id": admin.client_id})
+    db.add(UserSession(admin_id=admin.id, token=token, is_active=True))
+    db.commit()
+
+    return {
+        "access_token": token,
+        "token_type": "bearer",
+        "admin": {
+            "id": admin.id,
+            "email": admin.email,
+            "full_name": admin.full_name,
+            "client_id": admin.client_id,
         },
     }
 
@@ -114,6 +167,7 @@ def me(admin: Admin = Depends(get_current_admin)):
         "full_name": admin.full_name,
         "phone": admin.phone,
         "is_active": admin.is_active,
+        "client_id": admin.client_id,
     }
 
 

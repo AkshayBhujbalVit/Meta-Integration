@@ -35,56 +35,64 @@ from core.config import (
 from core.database import get_db
 from core.dependencies import get_current_admin
 from core.encryption import encrypt
+from models.models.admin import Admin
+from models.models.client import Client
 from models.models.platform_integration import PlatformIntegration
+from services.meta_service import save_client_meta_ad_accounts, save_client_meta_page
 
 logger = logging.getLogger("oauth")
 router = APIRouter(prefix="/oauth", tags=["OAuth"])
 
 # ── CSRF state store (per /start call, single-use, TTL 5 min) ────────────────
+# Carries which client_id (if any) this OAuth round-trip is connecting Meta
+# for, so the callback knows whether to save onto a specific tenant's Client
+# row or (for a Vidushi super-admin with no client_id) the platform-level
+# PlatformIntegration singleton.
 
-_STATE: dict[str, float] = {}
+_STATE: dict[str, tuple[float, int | None]] = {}
 _STATE_TTL = 300
 
 
-def _new_state() -> str:
+def _new_state(client_id: int | None = None) -> str:
     _prune_states()
     token = secrets.token_urlsafe(32)
-    _STATE[token] = time()
+    _STATE[token] = (time(), client_id)
     return token
 
 
-def _consume_state(token: str) -> bool:
+def _consume_state(token: str) -> tuple[bool, int | None]:
     _prune_states()
-    if token in _STATE:
-        del _STATE[token]
-        return True
-    return False
+    entry = _STATE.pop(token, None)
+    if entry is None:
+        return False, None
+    _, client_id = entry
+    return True, client_id
 
 
 def _prune_states():
     cutoff = time() - _STATE_TTL
-    for k in [k for k, v in _STATE.items() if v < cutoff]:
+    for k in [k for k, (ts, _) in _STATE.items() if ts < cutoff]:
         del _STATE[k]
 
 
 # ── Page session store (multiple-page selection, TTL 10 min) ─────────────────
 
-_PAGE_SESSIONS: dict[str, tuple[float, list[dict]]] = {}
+_PAGE_SESSIONS: dict[str, tuple[float, int | None, list[dict]]] = {}
 _PAGE_SESSION_TTL = 600
 
 
-def _store_pages(pages: list[dict]) -> str:
+def _store_pages(pages: list[dict], client_id: int | None) -> str:
     sid = secrets.token_urlsafe(16)
-    _PAGE_SESSIONS[sid] = (time(), pages)
+    _PAGE_SESSIONS[sid] = (time(), client_id, pages)
     return sid
 
 
-def _consume_pages(sid: str) -> list[dict] | None:
+def _consume_pages(sid: str) -> tuple[int | None, list[dict]] | None:
     entry = _PAGE_SESSIONS.pop(sid, None)
     if not entry:
         return None
-    created, pages = entry
-    return None if time() - created > _PAGE_SESSION_TTL else pages
+    created, client_id, pages = entry
+    return None if time() - created > _PAGE_SESSION_TTL else (client_id, pages)
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -109,7 +117,10 @@ def _popup_redirect(platform: str, **params) -> RedirectResponse:
 # ─────────────────────────────────────────────────────────────────────────────
 
 @router.post("/meta/start")
-def meta_start(_=Depends(get_current_admin)):
+def meta_start(
+    client_id: int | None = Query(None),
+    admin: Admin = Depends(get_current_admin),
+):
     if not META_APP_ID:
         raise HTTPException(
             500,
@@ -119,7 +130,13 @@ def meta_start(_=Depends(get_current_admin)):
     if not META_APP_SECRET:
         raise HTTPException(500, "META_APP_SECRET is not set in .env")
 
-    state = _new_state()
+    # Tenant admins always connect their own client, regardless of any
+    # client_id passed in. A Vidushi super-admin (admin.client_id is None)
+    # may target an explicit client_id, or omit it to connect the
+    # platform-level (agency-wide) Meta account instead.
+    target_client_id = admin.client_id if admin.client_id is not None else client_id
+
+    state = _new_state(target_client_id)
     redirect_uri = f"{BACKEND_PUBLIC_URL}/oauth/meta/callback"
     url = (
         "https://www.facebook.com/v19.0/dialog/oauth"
@@ -145,7 +162,10 @@ async def meta_callback(
     if error or not code:
         return _popup_redirect("meta", error=error or "cancelled")
 
-    if not state or not _consume_state(state):
+    if not state:
+        return _popup_redirect("meta", error="invalid_state")
+    state_valid, client_id = _consume_state(state)
+    if not state_valid:
         return _popup_redirect("meta", error="invalid_state")
 
     redirect_uri = f"{BACKEND_PUBLIC_URL}/oauth/meta/callback"
@@ -210,16 +230,26 @@ async def meta_callback(
     if not pages:
         return _popup_redirect("meta", error="no_pages")
 
-    _save_meta_ad_accounts(db, long_lived_token, ad_accounts)
+    client = None
+    if client_id is not None:
+        client = db.query(Client).filter(Client.id == client_id).first()
+        if not client:
+            return _popup_redirect("meta", error="client_not_found")
+        save_client_meta_ad_accounts(db, client, long_lived_token, ad_accounts)
+    else:
+        _save_meta_ad_accounts(db, long_lived_token, ad_accounts)
 
     if len(pages) == 1:
         page = pages[0]
-        _save_meta_page(db, page["id"], page["name"], page["access_token"])
-        logger.info("Meta OAuth connected: %s (%s)", page["name"], page["id"])
+        if client is not None:
+            save_client_meta_page(db, client, page["id"], page["name"], page["access_token"])
+        else:
+            _save_meta_page(db, page["id"], page["name"], page["access_token"])
+        logger.info("Meta OAuth connected: %s (%s) client_id=%s", page["name"], page["id"], client_id)
         return _popup_redirect("meta", success="1", page_name=page["name"], page_id=page["id"])
 
-    # Multiple pages — store them server-side, show picker in popup
-    sid = _store_pages(pages)
+    # Multiple pages — store them server-side (with which client this is for), show picker in popup
+    sid = _store_pages(pages, client_id)
     names_encoded = urllib.parse.quote("|".join(f"{p['id']}:{p['name']}" for p in pages))
     return _popup_redirect("meta", select="1", session=sid, pages=names_encoded)
 
@@ -230,16 +260,24 @@ def meta_select_page(
     page_id: str = Query(...),
     db: Session = Depends(get_db),
 ):
-    pages = _consume_pages(session)
-    if not pages:
+    entry = _consume_pages(session)
+    if not entry:
         raise HTTPException(400, "Session expired — please reconnect via the Connect button")
+    client_id, pages = entry
 
     page = next((p for p in pages if p["id"] == page_id), None)
     if not page:
         raise HTTPException(404, "Page not found in session")
 
-    _save_meta_page(db, page["id"], page["name"], page["access_token"])
-    logger.info("Meta OAuth page selected: %s (%s)", page["name"], page["id"])
+    if client_id is not None:
+        client = db.query(Client).filter(Client.id == client_id).first()
+        if not client:
+            raise HTTPException(404, "Client not found")
+        save_client_meta_page(db, client, page["id"], page["name"], page["access_token"])
+    else:
+        _save_meta_page(db, page["id"], page["name"], page["access_token"])
+
+    logger.info("Meta OAuth page selected: %s (%s) client_id=%s", page["name"], page["id"], client_id)
     return {"success": True, "page_name": page["name"], "page_id": page["id"]}
 
 
@@ -306,7 +344,10 @@ async def hubspot_callback(
     if error or not code:
         return _popup_redirect("hubspot", error=error or "cancelled")
 
-    if not state or not _consume_state(state):
+    if not state:
+        return _popup_redirect("hubspot", error="invalid_state")
+    state_valid, _ = _consume_state(state)
+    if not state_valid:
         return _popup_redirect("hubspot", error="invalid_state")
 
     redirect_uri = f"{BACKEND_PUBLIC_URL}/oauth/hubspot/callback"

@@ -16,6 +16,10 @@ class MetaLeadForm(Base):
     id = Column(Integer, primary_key=True)
     external_id = Column(String(50), nullable=False, unique=True, index=True)  # == Campaign.meta_form_id
 
+    # Which tenant this synced form belongs to. NULL = synced under the
+    # platform-level (super-admin) Meta connection rather than a client's own.
+    client_id = Column(Integer, ForeignKey("client.id", ondelete="CASCADE"), nullable=True, index=True)
+
     page_id = Column(String(50), nullable=True)
     name = Column(String(255), nullable=True)
     status = Column(String(30), nullable=True)

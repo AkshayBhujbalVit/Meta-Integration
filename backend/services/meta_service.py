@@ -13,10 +13,43 @@ import logging
 from datetime import datetime, timezone
 
 import httpx
+from sqlalchemy.orm import Session
 
-from core.encryption import decrypt
+from core.encryption import decrypt, encrypt
+from models.models.client import Client
 
 logger = logging.getLogger("meta_service")
+
+
+def save_client_meta_page(db: Session, client: Client, page_id: str, page_name: str, access_token: str) -> None:
+    """
+    Attach a connected Meta Page to this client — shared by the manual
+    "Connect Meta" form (routers/clients.py) and the OAuth callback
+    (routers/oauth.py) so there's one place that writes these fields.
+    """
+    client.meta_page_id = page_id
+    client.meta_page_name = page_name
+    client.meta_access_token = encrypt(access_token)
+    db.commit()
+
+
+def save_client_meta_ad_accounts(db: Session, client: Client, long_lived_token: str, ad_accounts: list[dict]) -> None:
+    """
+    Store the long-lived user token (needed for ad account/campaign reads) and
+    auto-select the ad account if there's exactly one. With multiple ad
+    accounts, leave meta_ad_account_id unset — the Integrations page lets the
+    admin pick one via GET/PATCH /integrations/meta/ad-account.
+    """
+    client.meta_user_access_token = encrypt(long_lived_token)
+    if len(ad_accounts) == 1:
+        client.meta_ad_account_id = ad_accounts[0]["id"]
+        logger.info("Meta ad account auto-selected for client %s: %s", client.id, ad_accounts[0]["id"])
+    elif len(ad_accounts) > 1:
+        logger.info(
+            "Meta OAuth found %d ad accounts for client %s — admin must pick one in Integrations",
+            len(ad_accounts), client.id,
+        )
+    db.commit()
 
 GRAPH_API_BASE = "https://graph.facebook.com/v19.0"
 

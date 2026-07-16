@@ -1,16 +1,23 @@
+import os
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from core.config import BACKEND_PUBLIC_URL
 from core.database import get_db
-from core.dependencies import get_current_admin
+from core.dependencies import get_current_admin, verify_client_access
 from core.encryption import encrypt, decrypt
+from models.models.admin import Admin
 from models.models.client import Client
+from services.meta_service import save_client_meta_page
 
 router = APIRouter(prefix="/clients", tags=["Clients"])
+
+LOGO_UPLOAD_DIR = os.path.join(os.path.dirname(__file__), "..", "uploads", "client_logos")
+os.makedirs(LOGO_UPLOAD_DIR, exist_ok=True)
+_ALLOWED_LOGO_EXTENSIONS = {".png", ".jpg", ".jpeg", ".svg", ".webp"}
 
 
 # ── Schemas ───────────────────────────────────────────────────────────────────
@@ -39,6 +46,7 @@ class ClientUpdate(BaseModel):
     notes: str | None = None
     meta_page_id: str | None = None
     meta_page_name: str | None = None
+    primary_color: str | None = None
     is_active: bool | None = None
 
 
@@ -53,6 +61,8 @@ def _serialize(c: Client) -> dict:
         "address": c.address,
         "city": c.city,
         "notes": c.notes,
+        "logo_url": c.logo_url,
+        "primary_color": c.primary_color,
         "meta_page_id": c.meta_page_id,
         "meta_page_name": c.meta_page_name,
         "hubspot_portal_id": c.hubspot_portal_id,
@@ -74,9 +84,12 @@ def _serialize(c: Client) -> dict:
 def list_clients(
     is_active: bool | None = Query(None),
     db: Session = Depends(get_db),
-    _: dict = Depends(get_current_admin),
+    admin: Admin = Depends(get_current_admin),
 ):
     q = db.query(Client)
+    # Tenant admins only ever see their own client — never the full list.
+    if admin.client_id is not None:
+        q = q.filter(Client.id == admin.client_id)
     if is_active is not None:
         q = q.filter(Client.is_active == is_active)
     clients = q.order_by(Client.name).all()
@@ -87,8 +100,12 @@ def list_clients(
 def create_client(
     body: ClientCreate,
     db: Session = Depends(get_db),
-    _: dict = Depends(get_current_admin),
+    admin: Admin = Depends(get_current_admin),
 ):
+    # Only Vidushi super-admins provision new clients this way; doctors get
+    # their own Client row created together with their Admin via /auth/signup.
+    if admin.client_id is not None:
+        raise HTTPException(status_code=403, detail="Not authorized to create clients")
     client = Client(**body.model_dump())
     db.add(client)
     db.commit()
@@ -100,7 +117,7 @@ def create_client(
 def get_client(
     client_id: int,
     db: Session = Depends(get_db),
-    _: dict = Depends(get_current_admin),
+    _: int = Depends(verify_client_access),
 ):
     client = db.query(Client).filter(Client.id == client_id).first()
     if not client:
@@ -113,7 +130,7 @@ def update_client(
     client_id: int,
     body: ClientUpdate,
     db: Session = Depends(get_db),
-    _: dict = Depends(get_current_admin),
+    _: int = Depends(verify_client_access),
 ):
     client = db.query(Client).filter(Client.id == client_id).first()
     if not client:
@@ -129,13 +146,45 @@ def update_client(
 def delete_client(
     client_id: int,
     db: Session = Depends(get_db),
-    _: dict = Depends(get_current_admin),
+    _: int = Depends(verify_client_access),
 ):
     client = db.query(Client).filter(Client.id == client_id).first()
     if not client:
         raise HTTPException(status_code=404, detail="Client not found")
     db.delete(client)
     db.commit()
+
+
+# ── Branding ──────────────────────────────────────────────────────────────────
+
+@router.post("/{client_id}/logo")
+async def upload_client_logo(
+    client_id: int,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    _: int = Depends(verify_client_access),
+):
+    """Upload a logo image for this client's dashboard/login branding."""
+    client = db.query(Client).filter(Client.id == client_id).first()
+    if not client:
+        raise HTTPException(status_code=404, detail="Client not found")
+
+    ext = os.path.splitext(file.filename or "")[1].lower()
+    if ext not in _ALLOWED_LOGO_EXTENSIONS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported file type '{ext}'. Allowed: {', '.join(sorted(_ALLOWED_LOGO_EXTENSIONS))}",
+        )
+
+    filename = f"client_{client_id}_{uuid.uuid4().hex[:8]}{ext}"
+    save_path = os.path.join(LOGO_UPLOAD_DIR, filename)
+    with open(save_path, "wb") as f:
+        f.write(await file.read())
+
+    client.logo_url = f"{BACKEND_PUBLIC_URL}/uploads/client_logos/{filename}"
+    db.commit()
+    db.refresh(client)
+    return {"logo_url": client.logo_url}
 
 
 # ── Meta connection ───────────────────────────────────────────────────────────
@@ -151,17 +200,14 @@ def connect_meta_page(
     client_id: int,
     body: MetaConnectBody,
     db: Session = Depends(get_db),
-    _: dict = Depends(get_current_admin),
+    _: int = Depends(verify_client_access),
 ):
     """Link a Meta Facebook Page to this client and store the page access token."""
     client = db.query(Client).filter(Client.id == client_id).first()
     if not client:
         raise HTTPException(status_code=404, detail="Client not found")
 
-    client.meta_page_id = body.meta_page_id
-    client.meta_page_name = body.meta_page_name
-    client.meta_access_token = encrypt(body.meta_access_token)
-    db.commit()
+    save_client_meta_page(db, client, body.meta_page_id, body.meta_page_name, body.meta_access_token)
     return {
         "ok": True,
         "client_id": client_id,
@@ -187,7 +233,7 @@ class CallingConfigBody(BaseModel):
 def get_calling_config(
     client_id: int,
     db: Session = Depends(get_db),
-    _: dict = Depends(get_current_admin),
+    _: int = Depends(verify_client_access),
 ):
     client = db.query(Client).filter(Client.id == client_id).first()
     if not client:
@@ -207,7 +253,7 @@ def update_calling_config(
     client_id: int,
     body: CallingConfigBody,
     db: Session = Depends(get_db),
-    _: dict = Depends(get_current_admin),
+    _: int = Depends(verify_client_access),
 ):
     client = db.query(Client).filter(Client.id == client_id).first()
     if not client:
@@ -235,7 +281,7 @@ class SMSConfigBody(BaseModel):
 def get_sms_config(
     client_id: int,
     db: Session = Depends(get_db),
-    _: dict = Depends(get_current_admin),
+    _: int = Depends(verify_client_access),
 ):
     client = db.query(Client).filter(Client.id == client_id).first()
     if not client:
@@ -254,7 +300,7 @@ def update_sms_config(
     client_id: int,
     body: SMSConfigBody,
     db: Session = Depends(get_db),
-    _: dict = Depends(get_current_admin),
+    _: int = Depends(verify_client_access),
 ):
     client = db.query(Client).filter(Client.id == client_id).first()
     if not client:
@@ -282,7 +328,7 @@ class WhatsAppConfigBody(BaseModel):
 def get_whatsapp_config(
     client_id: int,
     db: Session = Depends(get_db),
-    _: dict = Depends(get_current_admin),
+    _: int = Depends(verify_client_access),
 ):
     client = db.query(Client).filter(Client.id == client_id).first()
     if not client:
@@ -301,7 +347,7 @@ def update_whatsapp_config(
     client_id: int,
     body: WhatsAppConfigBody,
     db: Session = Depends(get_db),
-    _: dict = Depends(get_current_admin),
+    _: int = Depends(verify_client_access),
 ):
     client = db.query(Client).filter(Client.id == client_id).first()
     if not client:
@@ -322,7 +368,7 @@ def update_whatsapp_config(
 def generate_webhook_token(
     client_id: int,
     db: Session = Depends(get_db),
-    _: dict = Depends(get_current_admin),
+    _: int = Depends(verify_client_access),
 ):
     """Generate (or regenerate) the unique webhook token for this client."""
     client = db.query(Client).filter(Client.id == client_id).first()
@@ -344,7 +390,7 @@ def generate_webhook_token(
 def get_webhook_urls(
     client_id: int,
     db: Session = Depends(get_db),
-    _: dict = Depends(get_current_admin),
+    _: int = Depends(verify_client_access),
 ):
     """Return the webhook URLs for all platforms for this client."""
     client = db.query(Client).filter(Client.id == client_id).first()
@@ -378,7 +424,7 @@ def connect_hubspot(
     client_id: int,
     body: HubSpotConnectBody,
     db: Session = Depends(get_db),
-    _: dict = Depends(get_current_admin),
+    _: int = Depends(verify_client_access),
 ):
     client = db.query(Client).filter(Client.id == client_id).first()
     if not client:
@@ -401,7 +447,7 @@ def connect_hubspot(
 def disconnect_hubspot(
     client_id: int,
     db: Session = Depends(get_db),
-    _: dict = Depends(get_current_admin),
+    _: int = Depends(verify_client_access),
 ):
     client = db.query(Client).filter(Client.id == client_id).first()
     if not client:
@@ -424,7 +470,7 @@ def connect_google_ads(
     client_id: int,
     body: GoogleAdsConnectBody,
     db: Session = Depends(get_db),
-    _: dict = Depends(get_current_admin),
+    _: int = Depends(verify_client_access),
 ):
     client = db.query(Client).filter(Client.id == client_id).first()
     if not client:
@@ -450,7 +496,7 @@ def connect_google_ads(
 def disconnect_google_ads(
     client_id: int,
     db: Session = Depends(get_db),
-    _: dict = Depends(get_current_admin),
+    _: int = Depends(verify_client_access),
 ):
     client = db.query(Client).filter(Client.id == client_id).first()
     if not client:
@@ -472,7 +518,7 @@ def connect_klaviyo(
     client_id: int,
     body: KlaviyoConnectBody,
     db: Session = Depends(get_db),
-    _: dict = Depends(get_current_admin),
+    _: int = Depends(verify_client_access),
 ):
     client = db.query(Client).filter(Client.id == client_id).first()
     if not client:
@@ -497,7 +543,7 @@ def connect_klaviyo(
 def disconnect_klaviyo(
     client_id: int,
     db: Session = Depends(get_db),
-    _: dict = Depends(get_current_admin),
+    _: int = Depends(verify_client_access),
 ):
     client = db.query(Client).filter(Client.id == client_id).first()
     if not client:

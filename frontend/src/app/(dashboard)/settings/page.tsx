@@ -8,9 +8,10 @@ import {
   getCallingCredentials, updateCallingCredentials, activateProvider,
   getMessagingConfig, updateMessagingConfig,
   getCalendarConfig, updateCalendarConfig, testCalendarConnection, testCalDavConnection,
+  getMe, getClient, updateClient, uploadClientLogo,
 } from "@/lib/api";
 import { toast } from "sonner";
-import { Loader2, Save, Building2, Phone, MessageSquare, Smartphone, CalendarDays, CheckCircle2, XCircle, FlaskConical, KeyRound, Database, Trash2 } from "lucide-react";
+import { Loader2, Save, Building2, Phone, MessageSquare, Smartphone, CalendarDays, CheckCircle2, XCircle, FlaskConical, KeyRound, Database, Trash2, ImagePlus } from "lucide-react";
 import { api } from "@/lib/api";
 
 type Tab = "clinic" | "calling" | "sms" | "whatsapp" | "calendar" | "developer";
@@ -138,6 +139,97 @@ function DeveloperTab() {
   );
 }
 
+// ── Branding Card (per-tenant logo + business name) ────────────────────────────
+// Only shown for a doctor's own tenant login (admin.client_id set) — Vidushi
+// super-admins manage many clients and have no single business to brand.
+
+function BrandingCard() {
+  const qc = useQueryClient();
+  const { data: meData } = useQuery({ queryKey: ["auth-me"], queryFn: getMe });
+  const clientId = meData?.data?.client_id as number | undefined;
+
+  const { data: clientData, isLoading } = useQuery({
+    queryKey: ["settings-client", clientId],
+    queryFn: () => getClient(clientId as number),
+    enabled: !!clientId,
+  });
+
+  const [name, setName] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+
+  const client = clientData?.data ?? {};
+
+  const nameMut = useMutation({
+    mutationFn: (newName: string) => updateClient(clientId as number, { name: newName }),
+    onSuccess: () => {
+      toast.success("Business name saved");
+      setName(null);
+      qc.invalidateQueries({ queryKey: ["settings-client", clientId] });
+    },
+    onError: () => toast.error("Failed to save"),
+  });
+
+  const handleLogoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !clientId) return;
+    setUploading(true);
+    try {
+      await uploadClientLogo(clientId, file);
+      toast.success("Logo uploaded");
+      qc.invalidateQueries({ queryKey: ["settings-client", clientId] });
+    } catch {
+      toast.error("Failed to upload logo");
+    } finally {
+      setUploading(false);
+      e.target.value = "";
+    }
+  };
+
+  if (!clientId) return null;
+  if (isLoading) return <div className="flex items-center justify-center h-24"><Loader2 className="w-5 h-5 animate-spin text-blue-500" /></div>;
+
+  const currentName = name ?? client.name ?? "";
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-100 p-6 space-y-5">
+      <div className="pb-2 border-b border-gray-100">
+        <h3 className="font-semibold text-gray-800 text-sm">Branding</h3>
+        <p className="text-xs text-gray-400 mt-0.5">Your business name and logo, shown on your dashboard and login page</p>
+      </div>
+
+      <div className="flex items-center gap-4">
+        <div className="w-16 h-16 rounded-xl border border-gray-200 bg-gray-50 flex items-center justify-center overflow-hidden shrink-0">
+          {client.logo_url
+            ? <img src={client.logo_url} alt="Logo" className="w-full h-full object-contain" />
+            : <ImagePlus className="w-6 h-6 text-gray-300" />}
+        </div>
+        <div>
+          <label className="inline-flex items-center gap-2 px-4 py-2 border border-gray-200 hover:border-blue-400 text-sm font-medium text-gray-600 hover:text-blue-600 rounded-lg cursor-pointer transition">
+            {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <ImagePlus className="w-4 h-4" />}
+            {uploading ? "Uploading…" : "Upload Logo"}
+            <input type="file" accept="image/png,image/jpeg,image/svg+xml,image/webp" className="hidden"
+              onChange={handleLogoChange} disabled={uploading} />
+          </label>
+          <p className="text-xs text-gray-400 mt-1.5">PNG, JPG, SVG or WEBP</p>
+        </div>
+      </div>
+
+      <div>
+        <label className="block text-xs font-medium text-gray-600 mb-1.5">Business Name</label>
+        <div className="flex gap-2">
+          <input value={currentName} onChange={(e) => setName(e.target.value)}
+            className="flex-1 px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          <button onClick={() => nameMut.mutate(currentName)}
+            disabled={!currentName || currentName === client.name || nameMut.isPending}
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition">
+            {nameMut.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} Save
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Clinic Tab ────────────────────────────────────────────────────────────────
 
 function ClinicTab() {
@@ -164,7 +256,10 @@ function ClinicTab() {
   const val = (k: string) => form[k] ?? cfg[k] ?? "";
 
   return (
-    <div className="bg-white rounded-xl border border-gray-100 p-6 max-w-2xl space-y-5">
+    <div className="max-w-2xl space-y-6">
+      <BrandingCard />
+
+      <div className="bg-white rounded-xl border border-gray-100 p-6 space-y-5">
       <div className="grid grid-cols-2 gap-4">
         {[
           ["clinic_name", "Company Name"],
@@ -195,6 +290,7 @@ function ClinicTab() {
         className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition">
         {mut.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} Save Changes
       </button>
+      </div>
     </div>
   );
 }
