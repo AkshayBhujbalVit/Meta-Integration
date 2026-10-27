@@ -49,7 +49,7 @@ def verify_webhook(
     if not META_VERIFY_TOKEN:
         raise HTTPException(status_code=500, detail="META_VERIFY_TOKEN not configured in .env")
 
-    if hub_mode == "subscribe" and hub_verify_token == META_VERIFY_TOKEN:
+    if hub_mode == "subscribe" and hmac.compare_digest(hub_verify_token, META_VERIFY_TOKEN):
         logger.info("Meta webhook verified successfully")
         return int(hub_challenge)
 
@@ -70,20 +70,21 @@ async def receive_webhook(
 
     body = await request.body()
 
-    # HMAC signature verification
-    if META_APP_SECRET:
-        signature_header = request.headers.get("X-Hub-Signature-256", "")
-        expected = "sha256=" + hmac.new(
-            META_APP_SECRET.encode(), body, hashlib.sha256
-        ).hexdigest()
-        if not hmac.compare_digest(signature_header, expected):
-            logger.warning("Meta webhook signature mismatch — rejecting request")
-            raise HTTPException(status_code=403, detail="Invalid signature")
-    else:
-        logger.warning(
-            "META_APP_SECRET not set — signature verification SKIPPED. "
-            "Set META_APP_SECRET in .env to enforce HMAC checks."
+    # HMAC signature verification — fail closed. Without META_APP_SECRET we cannot
+    # authenticate the sender, so reject rather than trust an unsigned payload.
+    if not META_APP_SECRET:
+        logger.error(
+            "META_APP_SECRET not set — rejecting Meta webhook (cannot verify signature). "
+            "Set META_APP_SECRET in .env to enable this channel."
         )
+        raise HTTPException(status_code=401, detail="Webhook signature verification not configured")
+    signature_header = request.headers.get("X-Hub-Signature-256", "")
+    expected = "sha256=" + hmac.new(
+        META_APP_SECRET.encode(), body, hashlib.sha256
+    ).hexdigest()
+    if not hmac.compare_digest(signature_header, expected):
+        logger.warning("Meta webhook signature mismatch — rejecting request")
+        raise HTTPException(status_code=403, detail="Invalid signature")
 
     try:
         payload = await request.json()

@@ -30,9 +30,12 @@ app = FastAPI(
 )
 
 # ── CORS — only allow configured origins (never wildcard *) ───────────────────
+# Credentials are enabled, so a wildcard "*" would be unsafe (and invalid per the
+# CORS spec) — strip it defensively in case it slips into ALLOWED_ORIGINS.
+_cors_origins = [o for o in ALLOWED_ORIGINS if o != "*"]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=ALLOWED_ORIGINS,
+    allow_origins=_cors_origins,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type", "Accept"],
